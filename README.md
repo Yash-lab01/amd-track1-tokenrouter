@@ -1,3 +1,14 @@
+---
+title: TokRouter
+emoji: ⚡
+colorFrom: purple
+colorTo: blue
+sdk: docker
+dockerfile: Dockerfile.hf
+app_port: 7860
+pinned: false
+---
+
 # TokRouter — Hybrid Token-Efficient AI Agent
 ## AMD Developer Hackathon: ACT II — Track 1
 

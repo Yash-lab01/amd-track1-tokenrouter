@@ -1,0 +1,38 @@
+FROM python:3.11-slim
+
+# ── System deps for compiling llama-cpp-python and downloading the model ──────
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ── Python dependencies ───────────────────────────────────────────────────────
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir streamlit python-dotenv
+
+# ── Application source ────────────────────────────────────────────────────────
+COPY agent/   ./agent/
+COPY data/    ./data/
+COPY main.py  .
+COPY eval.py  .
+COPY streamlit_app.py .
+
+# ── Pre-bake the TF-IDF classifier pickle at build time ───────────────────────
+RUN python -c "from agent.classifier import DomainClassifier; DomainClassifier()"
+
+# ── Pre-download local model from Hugging Face Resolves ────────────────────────
+# This avoids having to upload 1.7GB to Git / Hugging Face Spaces!
+RUN mkdir -p /app/models && \
+    wget -O /app/models/gemma-2b-instruct-q4.gguf https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf
+
+# ── Hugging Face Space Port Configuration ─────────────────────────────────────
+ENV PORT=7860
+EXPOSE 7860
+
+# ── Run the Streamlit UI on the Hugging Face standard port ────────────────────
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port", "7860", "--server.address", "0.0.0.0"]
