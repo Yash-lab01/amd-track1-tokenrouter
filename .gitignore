@@ -1,0 +1,11 @@
+.env
+models/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+agent/classifier.pkl
+output/
+*.gguf
+venv/
+.venv/

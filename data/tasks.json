@@ -1,0 +1,14 @@
+[
+  {
+    "task_id": "math_1",
+    "prompt": "Solve for x: 3x + 10 = 25"
+  },
+  {
+    "task_id": "sentiment_1",
+    "prompt": "What is the sentiment of this text: 'The interface is beautiful and extremely fast!'"
+  },
+  {
+    "task_id": "factual_1",
+    "prompt": "What is the capital of Japan?"
+  }
+]
