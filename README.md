@@ -1,5 +1,5 @@
 ---
-title: TokRouter
+title: OptiRoute
 emoji: ⚡
 colorFrom: purple
 colorTo: blue
@@ -11,7 +11,7 @@ pinned: false
 
 <div align="center">
 
-# ⚡ TokRouter — Hybrid Token-Efficient AI Agent
+# ⚡ OptiRoute — Hybrid Token-Efficient AI Agent
 
 ### AMD Developer Hackathon: ACT II — Track 1
 
@@ -26,9 +26,9 @@ pinned: false
 
 ---
 
-## 🧠 What Is TokRouter?
+## 🧠 What Is OptiRoute?
 
-TokRouter is a 3-tier hybrid AI inference system. Instead of blindly sending every request to an expensive remote LLM, it classifies each task and routes it to the cheapest capable tier:
+OptiRoute is a 3-tier hybrid AI inference system. Instead of blindly sending every request to an expensive remote LLM, it classifies each task and routes it to the cheapest capable tier:
 
 | Tier | Solver | Token Cost | Used For |
 |------|--------|-----------|---------|
@@ -202,7 +202,7 @@ Output format (`results.json`):
 ### Build the image
 
 ```bash
-docker build -t tokrouter .
+docker build -t optiroute .
 ```
 
 > **Note:** The Dockerfile uses a prebuilt `llama-cpp-python` CPU wheel, so the build completes in ~2 minutes (no C++ compilation).
@@ -217,7 +217,7 @@ docker run `
   -e ALLOWED_MODELS=accounts/fireworks/models/deepseek-v4-pro `
   -v "${PWD}/data:/input" `
   -v "${PWD}/output:/output" `
-  tokrouter
+  optiroute
 ```
 
 **macOS / Linux:**
@@ -228,7 +228,7 @@ docker run \
   -e ALLOWED_MODELS=accounts/fireworks/models/deepseek-v4-pro \
   -v "$(pwd)/data:/input" \
   -v "$(pwd)/output:/output" \
-  tokrouter
+  optiroute
 ```
 
 ### Run the Streamlit UI inside Docker
@@ -238,70 +238,26 @@ docker run -p 7860:7860 \
   -e SPACE_ID=local \
   -e FIREWORKS_API_KEY=your_key \
   -e ALLOWED_MODELS=accounts/fireworks/models/deepseek-v4-pro \
-  tokrouter
+  optiroute
 ```
 
 Then open [http://localhost:7860](http://localhost:7860).
 
 ---
 
-## 🌐 Deployment Options
+## 🌐 Deployment
 
-### Option 1: Hugging Face Spaces (Live Demo)
+### Hugging Face Spaces (Live Demo)
 
 The project is deployed at:
 > **https://huggingface.co/spaces/YashB-21/amd-track1-tokenrouter**
 
 To deploy your own copy:
-1. Fork this repo to a new Hugging Face Space
+1. Fork this repo to a new Hugging Face Space (SDK: Docker)
 2. Set the following **Secrets** in your Space settings:
-   - `FIREWORKS_API_KEY` — your Fireworks API key
+   - `FIREWORKS_API_KEY` — your Fireworks AI API key
    - `ALLOWED_MODELS` — comma-separated model IDs
 3. Push to the Space — the Dockerfile handles everything automatically
-
-### Option 2: Railway (Recommended Free Alternative)
-
-[Railway](https://railway.app) offers a generous free tier with **500MB RAM** per month free.
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login and deploy
-railway login
-railway init
-railway up
-```
-
-Set environment variables in Railway dashboard → Variables.
-
-### Option 3: Render
-
-[Render](https://render.com) provides free Docker container hosting:
-1. Connect your GitHub repo
-2. Choose "Web Service" → Docker
-3. Add environment variables in Render dashboard
-4. Deploy
-
-### Option 4: Google Cloud Run (Using Fireworks Credits)
-
-> **Important:** Fireworks AI credits are for **API inference**, not for hosting. You cannot use them to deploy a server. However, since TokRouter *already uses* Fireworks AI for its Tier 3 remote calls, your $50 Fireworks credits directly reduce the cost of running the agent.
-
-If you want to host the Streamlit UI with zero infrastructure cost, use **Google Cloud Run** (free tier includes 2M requests/month):
-
-```bash
-# Build and push to Google Container Registry
-gcloud builds submit --tag gcr.io/YOUR_PROJECT/tokrouter
-
-# Deploy to Cloud Run
-gcloud run deploy tokrouter \
-  --image gcr.io/YOUR_PROJECT/tokrouter \
-  --platform managed \
-  --port 7860 \
-  --set-env-vars FIREWORKS_API_KEY=your_key \
-  --memory 4Gi \
-  --allow-unauthenticated
-```
 
 ---
 

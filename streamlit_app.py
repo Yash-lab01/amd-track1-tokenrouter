@@ -9,7 +9,7 @@ load_dotenv()
 
 # Set page config with premium theme settings
 st.set_page_config(
-    page_title="TokRouter — Hybrid AI Routing Agent",
+    page_title="OptiRoute — Hybrid AI Routing Agent",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -102,7 +102,7 @@ except Exception as e:
     st.stop()
 
 # Header layout
-st.markdown("<h1 style='text-align: center;'><span class='gradient-text'>⚡ TokRouter</span></h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'><span class='gradient-text'>⚡ OptiRoute</span></h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 1.1rem; margin-bottom: 40px;'>3-Tier Hybrid AI Routing Agent optimized for zero-token local inference & speculative correction.</p>", unsafe_allow_html=True)
 
 # Main UI layout
@@ -180,7 +180,7 @@ with col_stats:
 st.markdown("""
     <div class="glass-card">
         <h3>How it Works</h3>
-        <p>TokRouter implements a cascading 3-tier routing mechanism to balance speed, cost, and accuracy:</p>
+        <p>OptiRoute implements a cascading 3-tier routing mechanism to balance speed, cost, and accuracy:</p>
         <ol>
             <li><b>Tier 0 (Direct Solve):</b> Math and simple deterministic queries are solved instantly via python execution (0 LLM tokens).</li>
             <li><b>Tier 1/2 (Local Gemma-2B):</b> Prompts are routed to a quantized local Gemma model. Programmatic validation checks the syntax (e.g. valid Python, correct JSON keys). If valid, it returns the result (0 remote tokens).</li>
