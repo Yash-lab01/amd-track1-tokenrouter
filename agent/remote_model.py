@@ -47,12 +47,7 @@ class RemoteModel:
         self.base_url      = base_url.rstrip("/")
         self.allowed_models = [m.strip() for m in allowed_models if m.strip()]
 
-        # Select the best model — prioritize Gemma for $1k bonus
-        self.primary_model   = self._select_model(prefer="gemma")
-        self.secondary_model = self._select_model(prefer=None, exclude=self.primary_model)
-
-        print(f"[RemoteModel] Primary:   {self.primary_model}")
-        print(f"[RemoteModel] Secondary: {self.secondary_model}")
+        print(f"[RemoteModel] Initialized with {len(self.allowed_models)} allowed models.")
 
     # ──────────────────────────────────────────────────────────────────
     # Public API
@@ -62,12 +57,13 @@ class RemoteModel:
         compressed = self._prune_prompt(prompt)
         system     = REMOTE_SYSTEM_PROMPTS.get(domain, "Answer concisely.")
         max_tok    = REMOTE_MAX_TOKENS.get(domain, 100)
+        model      = self._get_model_for_domain(domain)
 
         return await self._call(
             system=system,
             user=compressed,
             max_tokens=max_tok,
-            model=self.primary_model,
+            model=model,
         )
 
     async def speculative_correct(
@@ -78,6 +74,7 @@ class RemoteModel:
         Saves ~70% output tokens vs full generation for code/logic tasks.
         """
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
+        model   = self._get_model_for_domain(domain)
 
         if domain in ("debugging", "codegen"):
             system = "If draft code has errors output ONLY the corrected code in ```python block. If correct reply VALID."
@@ -90,7 +87,7 @@ class RemoteModel:
             system=system,
             user=user,
             max_tokens=max_tok,
-            model=self.primary_model,
+            model=model,
         )
 
         # If remote says the draft is valid, return the local draft (0 output tokens wasted)
@@ -131,21 +128,35 @@ class RemoteModel:
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
 
-    def _select_model(self, prefer: str | None, exclude: str | None = None) -> str:
-        """Dynamically pick the best model from ALLOWED_MODELS at runtime."""
-        candidates = [m for m in self.allowed_models if m != exclude]
+    def _get_model_for_domain(self, domain: str) -> str:
+        """
+        Dynamically choose the most token-efficient/accurate model from ALLOWED_MODELS.
+        - For code/debugging: Prefer 'kimi' (specialized coding model)
+        - For general tasks: Prefer 'gemma' (qualifies for Best Use of Gemma)
+          - Prefer the MoE 'gemma-4-26b-a4b-it' (highly efficient 4B active params) if available
+          - Otherwise fallback to the dense 'gemma-4-31b-it'
+        """
+        if not self.allowed_models:
+            return "accounts/fireworks/models/gemma-4-31b-it"
 
-        if not candidates:
-            # Hardcoded fallback — should not normally be reached
-            return "accounts/fireworks/models/gemma2-9b-it"
-
-        if prefer:
-            for m in candidates:
-                if prefer.lower() in m.lower():
+        # 1. Coding tasks -> route to Kimi
+        if domain in ("debugging", "codegen"):
+            for m in self.allowed_models:
+                if "kimi" in m.lower():
                     return m
 
-        # Prefer smaller/cheaper models (they appear first in most lists)
-        return candidates[0]
+        # 2. General tasks -> route to Gemma MoE (26B with 4B active parameters)
+        for m in self.allowed_models:
+            if "gemma" in m.lower() and "26b" in m.lower():
+                return m
+
+        # 3. Fallback to any Gemma
+        for m in self.allowed_models:
+            if "gemma" in m.lower():
+                return m
+
+        # 4. Global fallback -> first allowed model
+        return self.allowed_models[0]
 
     def _prune_prompt(self, prompt: str, max_chars: int = 1200) -> str:
         """
