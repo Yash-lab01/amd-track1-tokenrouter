@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y wget && \
     apt-get purge -y wget && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ── I/O directories (expected by eval harness) ───────────────────────────────
-RUN mkdir -p /input /output
+RUN mkdir -p /input /output && chmod 777 /input /output
 
 # ── Runtime env defaults (non-sensitive only) ────────────────────────────────
 # FIREWORKS_API_KEY, ALLOWED_MODELS are injected at runtime by the eval harness
@@ -54,4 +54,4 @@ ENV FIREWORKS_BASE_URL="https://api.fireworks.ai/inference/v1"
 ENV LOCAL_MODEL_PATH="/app/models/gemma-2b-instruct-q4.gguf"
 
 # ── Entry point ───────────────────────────────────────────────────────────────
-CMD ["python", "main.py"]
+ENTRYPOINT ["python", "main.py"]
