@@ -85,9 +85,11 @@ class LocalModel:
         print(f"[LocalModel] Loading model: {model_path}")
         self.llm = Llama(
             model_path=model_path,
-            n_ctx=2048,
+            n_ctx=1280,              # Reduced from 2048 to save KV cache RAM (plenty for hackathon tasks)
             n_threads=min(4, os.cpu_count() or 4),
-            n_batch=512,
+            n_batch=256,             # Reduced from 512 to lower peak memory during prompt processing
+            use_mmap=True,           # Use memory-mapping to let OS page weights in/out dynamically
+            use_mlock=False,         # Do not lock memory (keeps physical RAM usage minimal)
             verbose=False,
         )
         self._lock = threading.Lock()
