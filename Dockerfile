@@ -24,6 +24,7 @@ COPY agent/   ./agent/
 COPY data/    ./data/
 COPY main.py  .
 COPY eval.py  .
+COPY streamlit_app.py .
 
 # ── Pre-bake the TF-IDF classifier pickle at build time ───────────────────────
 # This removes any training overhead from container startup
