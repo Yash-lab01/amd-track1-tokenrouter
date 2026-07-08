@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python cache & venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+
+# Local environment & secrets
+.env
+*.env
+
+# Local model files (downloaded at build time)
+models/*.gguf
+models/*.bin
+
+# Output files
+output/
+
+# Documentation & screenshots (not needed in image)
+*.md
+NEXT_STEPS.md
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# IDE & OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Dev tools
+.cache/
+*.pkl
+*.pickle
