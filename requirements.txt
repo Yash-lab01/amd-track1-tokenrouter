@@ -17,3 +17,8 @@ tenacity>=8.3.0
 
 # Dev caching (saves API credits during testing)
 diskcache>=5.6.3
+
+# Web UI (HuggingFace Spaces)
+streamlit>=1.35.0
+python-dotenv>=1.0.1
+

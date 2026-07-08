@@ -4,7 +4,7 @@ emoji: ⚡
 colorFrom: purple
 colorTo: blue
 sdk: docker
-dockerfile: Dockerfile.hf
+dockerfile: Dockerfile
 app_port: 7860
 pinned: false
 ---

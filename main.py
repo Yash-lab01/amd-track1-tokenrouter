@@ -35,6 +35,18 @@ async def process_task(task: dict, router: HybridRouter, semaphore: asyncio.Sema
 
 
 async def main():
+    # ── Hugging Face Space Auto-detection ──────────────────────────────
+    if "SPACE_ID" in os.environ:
+        print("[main] Hugging Face Space detected. Launching Streamlit UI...", flush=True)
+        import subprocess
+        port = os.environ.get("PORT", "7860")
+        subprocess.run([
+            "streamlit", "run", "streamlit_app.py",
+            "--server.port", port,
+            "--server.address", "0.0.0.0"
+        ])
+        return
+
     # ── Paths ──────────────────────────────────────────────────────────
     input_path  = sys.argv[1] if len(sys.argv) > 1 else "/input/tasks.json"
     output_path = sys.argv[2] if len(sys.argv) > 2 else "/output/results.json"
