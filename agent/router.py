@@ -71,14 +71,20 @@ class HybridRouter:
             return cleaned
 
         # ── Tier 2: Speculative remote correction ──────────────────────
-        # For code/logic — send draft, ask remote to verify/fix (saves tokens)
-        if domain in ("debugging", "codegen", "logic", "ner"):
-            remote_answer = await self.remote.speculative_correct(
-                prompt, local_answer, domain
-            )
-        else:
-            # Full remote generation for summarization / factual fallbacks
-            remote_answer = await self.remote.generate(prompt, domain)
-
-        self._answer_cache[prompt] = remote_answer
-        return remote_answer
+        # If the remote API fails (network error, timeout, rate limits, or blocked internet),
+        # we catch the exception and fall back to the local model's answer to prevent container crash.
+        try:
+            if domain in ("debugging", "codegen", "logic", "ner"):
+                remote_answer = await self.remote.speculative_correct(
+                    prompt, local_answer, domain
+                )
+            else:
+                # Full remote generation for summarization / factual fallbacks
+                remote_answer = await self.remote.generate(prompt, domain)
+            
+            self._answer_cache[prompt] = remote_answer
+            return remote_answer
+        except Exception as e:
+            print(f"[WARNING] Remote call failed: {e}. Falling back to local model draft.", flush=True)
+            self._answer_cache[prompt] = local_answer
+            return local_answer

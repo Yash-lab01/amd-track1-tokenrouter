@@ -25,13 +25,22 @@ from agent.router import HybridRouter
 
 
 async def process_task(task: dict, router: HybridRouter, semaphore: asyncio.Semaphore) -> dict:
-    """Process a single task with concurrency control."""
+    """Process a single task with concurrency control, catching errors to avoid batch crashes."""
     async with semaphore:
-        start = time.monotonic()
-        answer = await router.route_async(task["prompt"])
-        elapsed = time.monotonic() - start
-        print(f"  [{elapsed:.2f}s] task_id={task['task_id']} domain=? len={len(answer)}", flush=True)
-        return {"task_id": task["task_id"], "answer": answer}
+        task_id = str(task.get("task_id", "unknown"))
+        prompt  = str(task.get("prompt", ""))
+        if not prompt:
+            return {"task_id": task_id, "answer": "Error: Empty prompt"}
+
+        try:
+            start = time.monotonic()
+            answer = await router.route_async(prompt)
+            elapsed = time.monotonic() - start
+            print(f"  [{elapsed:.2f}s] task_id={task_id} len={len(answer)}", flush=True)
+            return {"task_id": task_id, "answer": answer}
+        except Exception as e:
+            print(f"[ERROR] Failed processing task {task_id}: {e}", file=sys.stderr, flush=True)
+            return {"task_id": task_id, "answer": f"Error: {e}"}
 
 
 async def main():
@@ -84,12 +93,16 @@ async def main():
     elapsed = time.monotonic() - t_start
     print(f"\n[main] Completed {len(results)} tasks in {elapsed:.1f}s", flush=True)
 
-    # ── Write output ───────────────────────────────────────────────────
+    # ── Write output atomically ───────────────────────────────────────
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(list(results), f, indent=2)
-
-    print(f"[main] Results written to {output_path}", flush=True)
+    tmp_path = output_path + ".tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(list(results), f, indent=2)
+        os.replace(tmp_path, output_path)
+        print(f"[main] Results successfully written to {output_path}", flush=True)
+    except Exception as e:
+        print(f"[ERROR] Failed writing output to {output_path}: {e}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":
