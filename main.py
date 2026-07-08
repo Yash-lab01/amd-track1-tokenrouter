@@ -36,7 +36,8 @@ async def process_task(task: dict, router: HybridRouter, semaphore: asyncio.Sema
 
 async def main():
     # ── Hugging Face Space Auto-detection ──────────────────────────────
-    if "SPACE_ID" in os.environ:
+    is_hf = "SPACE_ID" in os.environ or "SPACE_REPO_NAME" in os.environ or "HF_SPACE" in os.environ
+    if is_hf:
         print("[main] Hugging Face Space detected. Launching Streamlit UI...", flush=True)
         import subprocess
         port = os.environ.get("PORT", "7860")

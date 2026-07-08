@@ -9,6 +9,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# ── Set environment variables ──────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1
+ENV LOCAL_MODEL_PATH="/app/models/gemma-2b-instruct-q4.gguf"
+ENV PORT=7860
+EXPOSE 7860
+
 # ── Python dependencies ───────────────────────────────────────────────────────
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
