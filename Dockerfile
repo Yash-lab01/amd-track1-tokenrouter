@@ -47,10 +47,10 @@ RUN apt-get update && apt-get install -y wget && \
 # ── I/O directories (expected by eval harness) ───────────────────────────────
 RUN mkdir -p /input /output
 
-# ── Environment defaults (real values are injected by the eval harness) ───────
-ENV FIREWORKS_API_KEY=""
+# ── Runtime env defaults (non-sensitive only) ────────────────────────────────
+# FIREWORKS_API_KEY, ALLOWED_MODELS are injected at runtime by the eval harness
+# Do NOT set them here — keeps the image clean and warning-free
 ENV FIREWORKS_BASE_URL="https://api.fireworks.ai/inference/v1"
-ENV ALLOWED_MODELS=""
 ENV LOCAL_MODEL_PATH="/app/models/gemma-2b-instruct-q4.gguf"
 
 # ── Entry point ───────────────────────────────────────────────────────────────
