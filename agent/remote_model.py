@@ -2,103 +2,120 @@
 remote_model.py
 ---------------
 Async Fireworks AI client with:
-- Dynamic model selection from ALLOWED_MODELS (Gemma-first)
+- Ranked model selection from ALLOWED_MODELS
+- Prompt difficulty scoring for model upgrades
 - Exponential backoff retries via tenacity
 - Domain-specific max_tokens caps (output token saver)
-- Speculative correction (send local draft, ask remote to fix only)
-- Input prompt pruning to avoid paying for fluff tokens
+- Correction retry for invalid outputs
 """
-import os
-import asyncio
+import re
+
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-# Remote max_tokens per domain — aggressive caps to save output tokens
 REMOTE_MAX_TOKENS = {
-    "sentiment":     3,     # "positive" / "negative" / "neutral"
-    "factual":      60,
-    "math":         50,
-    "ner":          100,
-    "summarization":120,
-    "debugging":    300,
-    "codegen":      350,
-    "logic":        150,
+    "sentiment":     3,
+    "factual":      50,
+    "math":         60,
+    "ner":          120,
+    "summarization": 130,
+    "debugging":    350,
+    "codegen":      450,
+    "logic":        160,
 }
 
-# Compressed remote system prompts (minimal tokens — stripped of examples)
 REMOTE_SYSTEM_PROMPTS = {
-    "ner":           'Output JSON only: {"person":[],"org":[],"location":[],"date":[]}',
-    "sentiment":     "Reply with one word: positive, negative, or neutral.",
-    "math":          "Solve. Output: 'Answer: <number>'",
-    "summarization": "Summarize in 2 sentences.",
-    "debugging":     "Fix the code. Output corrected code only in ```python block.",
-    "codegen":       "Write working Python code in ```python block.",
-    "logic":         "Reason step by step, then give a concise conclusion.",
-    "factual":       "Answer concisely.",
+    "ner":           'Return ONLY a JSON object with exactly these keys: {"person":[],"org":[],"location":[],"date":[]}. Use empty arrays for missing entities. No prose, no markdown.',
+    "sentiment":     "Return exactly one word: positive, negative, or neutral. Nothing else.",
+    "math":          "Solve the problem. Return only the final numeric answer, no units unless asked.",
+    "summarization": "Write a concise summary only. No preamble like 'Here is a summary:'.",
+    "debugging":     "Return only the corrected code. No explanation.",
+    "codegen":       "Return only working Python code. No explanation or markdown unless explicitly requested.",
+    "logic":         "Answer accurately and concisely. State your final answer clearly on the last line.",
+    "factual":       "Return the direct answer only. One sentence or less. No extra facts.",
 }
 
-# Max input tokens before pruning (saves input token cost)
-MAX_INPUT_TOKENS = 300
+RETRY_SYSTEM_PROMPTS = {
+    "ner": 'Return ONLY valid JSON with keys person, org, location, date. Use empty arrays when missing.',
+    "sentiment": "Return exactly one word: positive, negative, or neutral.",
+    "math": "Return only the final numeric answer.",
+    "debugging": "Return only syntactically valid corrected Python code.",
+    "codegen": "Return only syntactically valid Python code.",
+}
+
+# Preference tags matched against ALLOWED_MODELS (first match wins per tier)
+DOMAIN_MODEL_PREFS: dict[str, list[list[str]]] = {
+    "sentiment": [["gemma", "26b"], ["gemma"]],
+    "math": [["gemma", "26b"], ["gemma"]],
+    "ner": [["gemma", "26b"], ["gemma"]],
+    "factual": [["gemma", "26b"], ["minimax"], ["gemma", "31b"], ["gemma"]],
+    "summarization": [["gemma", "26b"], ["gemma", "nvfp4"], ["gemma", "31b"]],
+    "logic": [["minimax"], ["gemma", "31b"], ["gemma", "26b"], ["gemma"]],
+    "debugging": [["kimi"], ["gemma", "31b"], ["gemma"]],
+    "codegen": [["kimi"], ["gemma", "31b"], ["gemma"]],
+}
+
+HARD_DOMAIN_UPGRADE: dict[str, list[list[str]]] = {
+    "factual": [["minimax"], ["gemma", "31b"], ["gemma", "26b"]],
+    "logic": [["minimax"], ["gemma", "31b"], ["gemma", "26b"]],
+    "summarization": [["gemma", "31b"], ["gemma", "26b"]],
+    "math": [["gemma", "31b"], ["gemma", "26b"]],
+}
 
 
 class RemoteModel:
     def __init__(self, api_key: str, base_url: str, allowed_models: list[str]):
-        self.api_key       = api_key
-        self.base_url      = base_url.rstrip("/")
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
         self.allowed_models = [m.strip() for m in allowed_models if m.strip()]
-
         print(f"[RemoteModel] Initialized with {len(self.allowed_models)} allowed models.")
 
-    # ──────────────────────────────────────────────────────────────────
-    # Public API
-    # ──────────────────────────────────────────────────────────────────
-    async def generate(self, prompt: str, domain: str = "factual") -> str:
-        """Full remote generation. Uses minimal compressed prompt."""
+    async def generate(
+        self,
+        prompt: str,
+        domain: str = "factual",
+        conf: float = 1.0,
+        upgrade: bool = False,
+    ) -> tuple[str, str]:
+        """Full remote generation. Returns (answer, model_id)."""
         compressed = self._prune_prompt(prompt)
-        system     = REMOTE_SYSTEM_PROMPTS.get(domain, "Answer concisely.")
-        max_tok    = REMOTE_MAX_TOKENS.get(domain, 100)
-        model      = self._get_model_for_domain(domain)
-
-        return await self._call(
-            system=system,
-            user=compressed,
-            max_tokens=max_tok,
-            model=model,
-        )
-
-    async def speculative_correct(
-        self, prompt: str, local_draft: str, domain: str = "factual"
-    ) -> str:
-        """
-        Speculative correction: send local draft and ask remote to fix ONLY if wrong.
-        Saves ~70% output tokens vs full generation for code/logic tasks.
-        """
+        system = REMOTE_SYSTEM_PROMPTS.get(domain, "Answer concisely.")
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
-        model   = self._get_model_for_domain(domain)
-
-        if domain in ("debugging", "codegen"):
-            system = "If draft code has errors output ONLY the corrected code in ```python block. If correct reply VALID."
-            user   = f"Task: {self._prune_prompt(prompt)}\nDraft:\n{local_draft}"
-        else:
-            system = "If draft answer is correct reply VALID. If wrong output only the correct answer, no explanation."
-            user   = f"Task: {self._prune_prompt(prompt)}\nDraft: {local_draft}"
+        model = self._pick_model(domain, prompt, conf, upgrade=upgrade)
 
         result = await self._call(
             system=system,
-            user=user,
+            user=f"Task:\n{compressed}\n\nAnswer:",
             max_tokens=max_tok,
             model=model,
         )
+        return result, model
 
-        # If remote says the draft is valid, return the local draft (0 output tokens wasted)
-        if "VALID" in result.upper() and len(result.split()) < 5:
-            return local_draft
+    async def generate_correction(
+        self,
+        prompt: str,
+        domain: str,
+        bad_answer: str,
+        conf: float = 1.0,
+    ) -> tuple[str, str]:
+        """Retry with a stricter prompt and stronger model."""
+        model = self._pick_model(domain, prompt, conf, upgrade=True)
+        system = RETRY_SYSTEM_PROMPTS.get(
+            domain,
+            "Fix the answer. Return only the corrected answer with no explanation.",
+        )
+        max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
+        result = await self._call(
+            system=system,
+            user=(
+                f"Task:\n{self._prune_prompt(prompt)}\n\n"
+                f"Bad answer:\n{bad_answer}\n\nCorrected answer:"
+            ),
+            max_tokens=max_tok,
+            model=model,
+        )
+        return result, model
 
-        return result
-
-    # ──────────────────────────────────────────────────────────────────
-    # Internal
-    # ──────────────────────────────────────────────────────────────────
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -112,62 +129,89 @@ class RemoteModel:
                 f"{self.base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type":  "application/json",
+                    "Content-Type": "application/json",
                 },
                 json={
-                    "model":       model,
-                    "messages":    [
+                    "model": model,
+                    "messages": [
                         {"role": "system", "content": system},
-                        {"role": "user",   "content": user},
+                        {"role": "user", "content": user},
                     ],
-                    "max_tokens":  max_tokens,
+                    "max_tokens": max_tokens,
                     "temperature": 0.1,
-                    "top_p":       0.9,
+                    "top_p": 0.9,
                 },
             )
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
 
-    def _get_model_for_domain(self, domain: str) -> str:
-        """
-        Dynamically choose the most token-efficient/accurate model from ALLOWED_MODELS.
-        - For code/debugging: Prefer 'kimi' (specialized coding model)
-        - For general tasks: Prefer 'gemma' (qualifies for Best Use of Gemma)
-          - Prefer the MoE 'gemma-4-26b-a4b-it' (highly efficient 4B active params) if available
-          - Otherwise fallback to the dense 'gemma-4-31b-it'
-        """
-        if not self.allowed_models:
-            return "accounts/fireworks/models/gemma-4-31b-it"
+    def _score_difficulty(self, prompt: str, conf: float) -> int:
+        """Score prompt difficulty to decide whether to upgrade model tier."""
+        score = 0
+        # Long prompt = more context = harder
+        if len(prompt) > 700:
+            score += 1
+        # Contains code block
+        if "```" in prompt:
+            score += 1
+        # Complex reasoning or constraint language
+        if re.search(
+            r"\b(proof|puzzle|constraint|reasoning|step by step|multiple|"
+            r"all of the following|if and only if|necessarily|must be|cannot be)\b",
+            prompt, re.IGNORECASE,
+        ):
+            score += 1
+        # Explanation / justification requested (needs more output)
+        if re.search(
+            r"\b(explain|why|how does|prove|justify|elaborate|describe|analyze)\b",
+            prompt, re.IGNORECASE,
+        ):
+            score += 1
+        # Multipart / multiple sub-questions
+        if re.search(r"\b(and also|additionally|furthermore|as well as|second|third)\b"
+                     r"|\(a\)|\(b\)|\d+\.\s+\w",
+                     prompt, re.IGNORECASE):
+            score += 1
+        # Very short prompt — could be a trick question or ambiguous
+        if len(prompt.strip()) < 40:
+            score += 1
+        # Low classifier confidence
+        if conf < 0.65:
+            score += 1
+        return score
 
-        # 1. Coding tasks -> route to Kimi
-        if domain in ("debugging", "codegen"):
-            for m in self.allowed_models:
-                if "kimi" in m.lower():
-                    return m
+    def _pick_model(
+        self,
+        domain: str,
+        prompt: str,
+        conf: float,
+        upgrade: bool = False,
+    ) -> str:
+        difficulty = self._score_difficulty(prompt, conf)
+        use_upgrade = upgrade or difficulty >= 2
 
-        # 2. General tasks -> route to Gemma MoE (26B with 4B active parameters)
-        for m in self.allowed_models:
-            if "gemma" in m.lower() and "26b" in m.lower():
-                return m
+        if use_upgrade and domain in HARD_DOMAIN_UPGRADE:
+            tiers = HARD_DOMAIN_UPGRADE[domain]
+        else:
+            tiers = DOMAIN_MODEL_PREFS.get(domain, [["gemma", "26b"], ["gemma"]])
 
-        # 3. Fallback to any Gemma
-        for m in self.allowed_models:
-            if "gemma" in m.lower():
-                return m
+        for tags in tiers:
+            model = self._find_model(tags)
+            if model:
+                return model
 
-        # 4. Global fallback -> first allowed model
-        return self.allowed_models[0]
+        return self.allowed_models[0] if self.allowed_models else "accounts/fireworks/models/gemma-4-31b-it"
+
+    def _find_model(self, tags: list[str]) -> str | None:
+        for model in self.allowed_models:
+            lower = model.lower()
+            if all(tag.lower() in lower for tag in tags):
+                return model
+        return None
 
     def _prune_prompt(self, prompt: str, max_chars: int = 1200) -> str:
-        """
-        Prune input prompt to avoid paying for excessive input tokens.
-        Simple heuristic: truncate at max_chars if over limit.
-        (Token-level pruning requires llama tokenizer — done in router.py)
-        """
         if len(prompt) <= max_chars:
             return prompt
-
-        # Keep first 60% and last 40% — preserves question + context
         keep_start = int(max_chars * 0.6)
-        keep_end   = max_chars - keep_start
+        keep_end = max_chars - keep_start
         return prompt[:keep_start] + "\n[...truncated...]\n" + prompt[-keep_end:]

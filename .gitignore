@@ -9,3 +9,9 @@ output/
 venv/
 .venv/
 *.pdf
+docs/
+*.png
+PROJECT_SUMMARY.md
+HACKATHON_WINNING_PLAN.md
+ESCALATION_PLAN.md
+NEXT_STEPS.md

@@ -1,0 +1,539 @@
+{
+  "mode": "local",
+  "accuracy": 0.7903225806451613,
+  "correct": 49,
+  "total": 62,
+  "elapsed_s": 311.1104173999629,
+  "domain_stats": {
+    "factual": {
+      "correct": 7,
+      "total": 10
+    },
+    "math": {
+      "correct": 11,
+      "total": 12
+    },
+    "sentiment": {
+      "correct": 10,
+      "total": 10
+    },
+    "ner": {
+      "correct": 7,
+      "total": 7
+    },
+    "debugging": {
+      "correct": 5,
+      "total": 7
+    },
+    "codegen": {
+      "correct": 5,
+      "total": 5
+    },
+    "logic": {
+      "correct": 1,
+      "total": 8
+    },
+    "summarization": {
+      "correct": 3,
+      "total": 3
+    }
+  },
+  "results": [
+    {
+      "task_id": "f1",
+      "domain": "factual",
+      "prompt": "What is the capital of France?",
+      "answer": "Paris",
+      "expected": "Paris",
+      "correct": true
+    },
+    {
+      "task_id": "f2",
+      "domain": "factual",
+      "prompt": "Who wrote Romeo and Juliet?",
+      "answer": "William Shakespeare",
+      "expected": "Shakespeare",
+      "correct": true
+    },
+    {
+      "task_id": "f3",
+      "domain": "factual",
+      "prompt": "What is the boiling point of water in Celsius?",
+      "answer": "100 \u00b0C",
+      "expected": "100",
+      "correct": true
+    },
+    {
+      "task_id": "f4",
+      "domain": "factual",
+      "prompt": "How many planets are in our solar system?",
+      "answer": "Eight",
+      "expected": "8",
+      "correct": false
+    },
+    {
+      "task_id": "f5",
+      "domain": "factual",
+      "prompt": "What is the chemical symbol for gold?",
+      "answer": "Au",
+      "expected": "Au",
+      "correct": true
+    },
+    {
+      "task_id": "f6",
+      "domain": "factual",
+      "prompt": "In what year did World War II end?",
+      "answer": "1945",
+      "expected": "1945",
+      "correct": true
+    },
+    {
+      "task_id": "m1",
+      "domain": "math",
+      "prompt": "What is 15% of 240?",
+      "answer": "36",
+      "expected": "36",
+      "correct": true
+    },
+    {
+      "task_id": "m2",
+      "domain": "math",
+      "prompt": "Calculate 7 * 8 + 12",
+      "answer": "68",
+      "expected": "68",
+      "correct": true
+    },
+    {
+      "task_id": "m3",
+      "domain": "math",
+      "prompt": "Solve for x: 2x + 6 = 18",
+      "answer": "6",
+      "expected": "6",
+      "correct": true
+    },
+    {
+      "task_id": "m4",
+      "domain": "math",
+      "prompt": "What is the factorial of 5?",
+      "answer": "120",
+      "expected": "120",
+      "correct": true
+    },
+    {
+      "task_id": "f7",
+      "domain": "factual",
+      "prompt": "What is the largest planet in our solar system?",
+      "answer": "Jupiter",
+      "expected": "Jupiter",
+      "correct": true
+    },
+    {
+      "task_id": "m6",
+      "domain": "math",
+      "prompt": "A train travels 150 km in 3 hours. What is its average speed?",
+      "answer": "50",
+      "expected": "50",
+      "correct": true
+    },
+    {
+      "task_id": "m7",
+      "domain": "math",
+      "prompt": "What is the GCD of 48 and 18?",
+      "answer": "6",
+      "expected": "6",
+      "correct": true
+    },
+    {
+      "task_id": "m8",
+      "domain": "math",
+      "prompt": "Find the mean of: 4, 8, 15, 16, 23",
+      "answer": "13.2",
+      "expected": "13.2",
+      "correct": true
+    },
+    {
+      "task_id": "m9",
+      "domain": "math",
+      "prompt": "What is 25% of 200?",
+      "answer": "50",
+      "expected": "50",
+      "correct": true
+    },
+    {
+      "task_id": "m10",
+      "domain": "math",
+      "prompt": "Evaluate: (3 + 5) * 4 - 6",
+      "answer": "26",
+      "expected": "26",
+      "correct": true
+    },
+    {
+      "task_id": "m11",
+      "domain": "math",
+      "prompt": "What is the area of a circle with radius 7? Use pi = 3.14159",
+      "answer": "153.93804",
+      "expected": "153.938",
+      "correct": true
+    },
+    {
+      "task_id": "m12",
+      "domain": "math",
+      "prompt": "Solve: x^2 - 5x + 6 = 0",
+      "answer": "2, 3",
+      "expected": "2, 3",
+      "correct": true
+    },
+    {
+      "task_id": "s1",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment: 'This product is absolutely amazing, I love it!'",
+      "answer": "positive",
+      "expected": "positive",
+      "correct": true
+    },
+    {
+      "task_id": "f8",
+      "domain": "factual",
+      "prompt": "Who invented the telephone?",
+      "answer": "Alexander Graham Bell",
+      "expected": "Bell",
+      "correct": true
+    },
+    {
+      "task_id": "s3",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment: 'It's okay, nothing special, pretty average.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true
+    },
+    {
+      "task_id": "s4",
+      "domain": "sentiment",
+      "prompt": "What is the sentiment of this review: 'The food was great but the service was slow.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true
+    },
+    {
+      "task_id": "s5",
+      "domain": "sentiment",
+      "prompt": "Sentiment: 'I absolutely hate how slow this is, worst software ever.'",
+      "answer": "negative",
+      "expected": "negative",
+      "correct": true
+    },
+    {
+      "task_id": "s6",
+      "domain": "sentiment",
+      "prompt": "Determine the sentiment: 'The movie was fantastic and I highly recommend it!'",
+      "answer": "positive",
+      "expected": "positive",
+      "correct": true
+    },
+    {
+      "task_id": "s7",
+      "domain": "sentiment",
+      "prompt": "Classify: 'Delivery was on time. Product looks fine.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true
+    },
+    {
+      "task_id": "f9",
+      "domain": "factual",
+      "prompt": "What is the speed of light in km/s?",
+      "answer": "299,792,458",
+      "expected": "300000",
+      "correct": false
+    },
+    {
+      "task_id": "f10",
+      "domain": "factual",
+      "prompt": "What element has atomic number 1?",
+      "answer": "1",
+      "expected": "hydrogen",
+      "correct": false
+    },
+    {
+      "task_id": "s10",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment of: 'Fine. Gets the job done I guess.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true
+    },
+    {
+      "task_id": "m5",
+      "domain": "math",
+      "prompt": "What is the area of a rectangle with length 8 and width 5?",
+      "answer": "8",
+      "expected": "40",
+      "correct": false
+    },
+    {
+      "task_id": "s2",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment: 'Terrible experience, never buying again.'",
+      "answer": "negative",
+      "expected": "negative",
+      "correct": true
+    },
+    {
+      "task_id": "s8",
+      "domain": "sentiment",
+      "prompt": "Is this positive, negative, or neutral: 'I love this product! It exceeded all my expectations.'",
+      "answer": "positive",
+      "expected": "positive",
+      "correct": true
+    },
+    {
+      "task_id": "s9",
+      "domain": "sentiment",
+      "prompt": "Sentiment analysis: 'The support team was rude and unhelpful. Completely disappointed.'",
+      "answer": "negative",
+      "expected": "negative",
+      "correct": true
+    },
+    {
+      "task_id": "n1",
+      "domain": "ner",
+      "prompt": "Extract named entities from: 'Elon Musk founded SpaceX in 2002 in Hawthorne, California.'",
+      "answer": "{\"person\":[\"Elon Musk\"],\"org\":[\"SpaceX\"],\"location\":[\"Hawthorne, California\"],\"date\":[\"2002\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "n2",
+      "domain": "ner",
+      "prompt": "Extract entities: 'Barack Obama was born in Honolulu, Hawaii on August 4, 1961.'",
+      "answer": "{\"person\":[\"Barack Obama\"],\"org\":[],\"location\":[\"Honolulu\",\"Hawaii\"],\"date\":[\"August 4, 1961\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "n3",
+      "domain": "ner",
+      "prompt": "Identify named entities in: 'Apple Inc. released the iPhone 15 in September 2023 in Cupertino.'",
+      "answer": "{\"person\":[],\"org\":[\"Apple Inc.\"],\"location\":[\"Cupertino\"],\"date\":[\"September 2023\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "n4",
+      "domain": "ner",
+      "prompt": "Extract all named entities: 'Google CEO Sundar Pichai spoke at the Paris AI Summit in January 2024.'",
+      "answer": "{\"person\":[\"Sundar Pichai\"],\"org\":[\"Google\"],\"location\":[\"Paris\"],\"date\":[\"January 2024\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "d2",
+      "domain": "debugging",
+      "prompt": "Fix this code:\ndef add(a, b):\n    return a - b",
+      "answer": "def add(a, b):\n    return a + b",
+      "expected": "a + b",
+      "correct": true
+    },
+    {
+      "task_id": "n5",
+      "domain": "ner",
+      "prompt": "Find entities: 'Microsoft acquired Activision Blizzard in October 2023.'",
+      "answer": "{\"person\":[],\"org\":[\"Microsoft\",\"Activision Blizzard\"],\"location\":[],\"date\":[\"October 2023\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "d4",
+      "domain": "debugging",
+      "prompt": "Fix the bug:\ndef is_even(n):\n    return n % 2 == 1",
+      "answer": "return n % 2 == 0",
+      "expected": "== 0",
+      "correct": true
+    },
+    {
+      "task_id": "n6",
+      "domain": "ner",
+      "prompt": "Named Entity Recognition: 'Taylor Swift performed in London on June 21, 2024.'",
+      "answer": "{\"person\":[\"Taylor Swift\"],\"org\":[],\"location\":[\"London\"],\"date\":[\"June 21, 2024\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "n7",
+      "domain": "ner",
+      "prompt": "Extract entities from: 'The United Nations held a climate conference in Dubai in December 2023.'",
+      "answer": "{\"person\":[],\"org\":[\"United Nations\"],\"location\":[\"Dubai\"],\"date\":[\"December 2023\"]}",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "d1",
+      "domain": "debugging",
+      "prompt": "Fix this Python code:\ndef factorial(n):\n    return n * factorial(n)",
+      "answer": "def factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)",
+      "expected": "factorial(n-1)",
+      "correct": true
+    },
+    {
+      "task_id": "d3",
+      "domain": "debugging",
+      "prompt": "Debug:\ndef divide(a, b):\n    return a / b\n# crashes when b=0",
+      "answer": "def divide(a, b):\n    if b == 0:\n        return \"Division by zero is not allowed\"\n    else:\n        return a / b",
+      "expected": "if b == 0",
+      "correct": true
+    },
+    {
+      "task_id": "d5",
+      "domain": "debugging",
+      "prompt": "Fix:\ndef greet(name):\n    print('Hello ' + name + '!')\ngreet(42)",
+      "answer": "def greet(name):\n    print('Hello ' + name + '!')\ngreet(\"42\")",
+      "expected": "str(name)",
+      "correct": false
+    },
+    {
+      "task_id": "d6",
+      "domain": "debugging",
+      "prompt": "What is wrong and fix it:\ndef square_list(lst):\n    return [x^2 for x in lst]",
+      "answer": "def square_list(lst):\n    return [x**2 for x in lst]",
+      "expected": "x**2",
+      "correct": true
+    },
+    {
+      "task_id": "d7",
+      "domain": "debugging",
+      "prompt": "Fix this off-by-one error:\ndef sum_to_n(n):\n    total = 0\n    for i in range(n):\n        total += i\n    return total",
+      "answer": "def sum_to_n(n):\n    total = 0\n    for i in range(n + 1):  # Corrected range to include n+1\n        total += i\n    return total",
+      "expected": "range(n+1)",
+      "correct": false
+    },
+    {
+      "task_id": "c1",
+      "domain": "codegen",
+      "prompt": "Write a Python function that returns the sum of all even numbers in a list.",
+      "answer": "def sum_even_numbers(numbers):\n  \"\"\"Calculates the sum of all even numbers in a list.\n\n  Args:\n    numbers: A list of numbers.\n\n  Returns:\n    The sum of all even numbers in the list.\n  \"\"\"\n  sum = 0\n  for number in numbers:\n    if number % 2 == 0:\n      sum += number\n  return sum",
+      "expected": "def",
+      "correct": true
+    },
+    {
+      "task_id": "c2",
+      "domain": "codegen",
+      "prompt": "Write a Python function to check if a string is a palindrome.",
+      "answer": "def is_palindrome(text):\n  \"\"\"Checks if a string is a palindrome.\n\n  Args:\n    text: The string to check.\n\n  Returns:\n    True if the string is a palindrome, False otherwise.\n  \"\"\"\n  processed_text = ''.join(c for c in text.lower() if c.isalnum())\n  return processed_text == processed_text[::-1]",
+      "expected": "def",
+      "correct": true
+    },
+    {
+      "task_id": "c3",
+      "domain": "codegen",
+      "prompt": "Write a Python function that finds the maximum element in a list without using max().",
+      "answer": "def find_max(data):\n  \"\"\"Finds the maximum element in a list without using the built-in max() function.\n\n  Args:\n    data: A list of numbers.\n\n  Returns:\n    The maximum element in the list.\n  \"\"\"\n  if not data:\n    return None  # Handle empty list case\n\n  max_element = data[0]  # Initialize with the first element\n  for element in data:\n    if element > max_element:\n      max_element = element\n  return max_element",
+      "expected": "def",
+      "correct": true
+    },
+    {
+      "task_id": "c4",
+      "domain": "codegen",
+      "prompt": "Write Python code to count the frequency of each word in a string.",
+      "answer": "def word_frequency(text):\n  \"\"\"Counts the frequency of each word in a string.\n\n  Args:\n    text: The string to analyze.\n\n  Returns:\n    A dictionary where keys are words and values are their frequencies.\n  \"\"\"\n  words = text.lower().split()\n  frequency = {}\n  for word in words:\n    if word in frequency:\n      frequency[word] += 1\n    else:\n      frequency[word] = 1\n  return frequency\n\n# Example usage (you can uncomment this if you want to see the output)\ntext = \"This is a test string. This string is a test.\"\nfrequency = word_frequency(text)\nprint(frequency)",
+      "expected": "def",
+      "correct": true
+    },
+    {
+      "task_id": "c5",
+      "domain": "codegen",
+      "prompt": "Write a Python function to reverse a string without using slicing.",
+      "answer": "def reverse_string(s):\n  \"\"\"Reverses a string without using slicing.\n\n  Args:\n    s: The string to reverse.\n\n  Returns:\n    The reversed string.\n  \"\"\"\n  reversed_string = \"\"\n  for i in range(len(s) - 1, -1, -1):\n    reversed_string += s[i]\n  return reversed_string",
+      "expected": "def",
+      "correct": true
+    },
+    {
+      "task_id": "l1",
+      "domain": "logic",
+      "prompt": "All cats are animals. Fluffy is a cat. Is Fluffy an animal?",
+      "answer": "** Therefore, Fluffy is an animal",
+      "expected": "Yes",
+      "correct": false
+    },
+    {
+      "task_id": "l2",
+      "domain": "logic",
+      "prompt": "If it rains, the ground gets wet. The ground is wet. Did it necessarily rain?",
+      "answer": "** Did it necessarily rain?",
+      "expected": "No",
+      "correct": false
+    },
+    {
+      "task_id": "l3",
+      "domain": "logic",
+      "prompt": "All birds can fly. Penguins are birds. Can penguins fly?",
+      "answer": "ning:",
+      "expected": "No",
+      "correct": false
+    },
+    {
+      "task_id": "l4",
+      "domain": "logic",
+      "prompt": "A bat and a ball cost $1.10 in total. The bat costs $1 more than the ball. How much does the ball cost?",
+      "answer": "2",
+      "expected": "0.05",
+      "correct": false
+    },
+    {
+      "task_id": "l5",
+      "domain": "logic",
+      "prompt": "If A > B and B > C, then is A > C?",
+      "answer": "ning:",
+      "expected": "Yes",
+      "correct": false
+    },
+    {
+      "task_id": "l6",
+      "domain": "logic",
+      "prompt": "There are 3 boxes: one has apples, one has oranges, one has both. All labels are wrong. You pick one fruit from the box labeled 'Both'. It's an apple. What does that box actually contain?",
+      "answer": "ning:",
+      "expected": "apples",
+      "correct": false
+    },
+    {
+      "task_id": "l7",
+      "domain": "logic",
+      "prompt": "A man builds a house with all 4 sides facing south. A bear walks past. What color is the bear?",
+      "answer": "The bear is white",
+      "expected": "white",
+      "correct": true
+    },
+    {
+      "task_id": "l8",
+      "domain": "logic",
+      "prompt": "John is taller than Mike. Mike is taller than Sarah. Who is the shortest?",
+      "answer": "ning:",
+      "expected": "Sarah",
+      "correct": false
+    },
+    {
+      "task_id": "sum1",
+      "domain": "summarization",
+      "prompt": "Summarize in 2 sentences:\nArtificial intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn. AI has applications in many fields including medicine, finance, and transportation. Modern AI systems use neural networks trained on large datasets to perform tasks such as image recognition, language translation, and decision-making. The rapid advancement of AI has raised both exciting opportunities and significant ethical questions about privacy, employment, and autonomous decision-making.",
+      "answer": "\"\"\"\nThis code provides a concise summary of Artificial Intelligence (AI). \n\nIt highlights the capabilities of AI, its applications across various fields, and the ethical considerations surrounding its development.\n\"\"\"",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "sum2",
+      "domain": "summarization",
+      "prompt": "Give a brief summary:\nThe Amazon rainforest is the world's largest tropical rainforest, covering over 5.5 million square kilometers across nine countries in South America. It is home to an estimated 10% of all species on Earth and plays a crucial role in regulating the global climate by absorbing vast amounts of carbon dioxide. However, deforestation driven by agriculture, logging, and infrastructure development has destroyed significant portions of the forest, threatening both biodiversity and climate stability.",
+      "answer": "The Amazon rainforest is the world's largest tropical rainforest, home to a vast array of species and crucial for climate regulation",
+      "expected": "",
+      "correct": true
+    },
+    {
+      "task_id": "sum3",
+      "domain": "summarization",
+      "prompt": "Summarize this in one sentence:\nThe Industrial Revolution, which began in Britain in the late 18th century, transformed manufacturing processes through the introduction of machinery, steam power, and factory systems. This period of rapid industrialization fundamentally changed how goods were produced and led to massive urbanization as workers moved from rural areas to cities to find employment in factories.",
+      "answer": "The Industrial Revolution, marked by technological advancements and factory systems, revolutionized manufacturing and led to significant urbanization as people migrated from rural areas to urban centers seeking work.",
+      "expected": "",
+      "correct": true
+    }
+  ]
+}
