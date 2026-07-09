@@ -156,12 +156,18 @@ class HybridRouter:
             return cleaned
         except Exception as exc:
             print(f"[WARNING] Remote call failed: {exc}. Falling back to local.", flush=True)
-            # Use whatever local answer we already have; do NOT call _generate_local
-            # again here — it could timeout and create an infinite wait.
             if local_answer is not None:
                 fallback = postprocess(domain, local_answer)
             else:
-                fallback = ""
+                # We do not have a local answer because it was REMOTE_FIRST.
+                # We MUST generate one now, or else we return an empty string and score 0.
+                try:
+                    local_ans = await self._generate_local(prompt, domain)
+                    is_val, cleaned_local = validate(domain, prompt, local_ans)
+                    fallback = cleaned_local if is_val else postprocess(domain, local_ans)
+                except Exception as local_exc:
+                    print(f"[WARNING] Local fallback also failed/timed out: {local_exc}", flush=True)
+                    fallback = ""
             self._trace(domain, conf, "local", "remote-failed", model="local")
             return fallback
 

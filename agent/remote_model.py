@@ -95,14 +95,11 @@ class RemoteModel:
             # For NER, we use native JSON mode
             pass
 
-        resp_format = {"type": "json_object"} if domain == "ner" else None
-
         result = await self._call(
             system=system,
             user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
             max_tokens=max_tok,
             model=model,
-            response_format=resp_format,
         )
         return result, model
 
@@ -120,7 +117,6 @@ class RemoteModel:
             "Fix the answer. Return only the corrected answer with no explanation.",
         )
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
-        resp_format = {"type": "json_object"} if domain == "ner" else None
         result = await self._call(
             system=system,
             user=(
@@ -129,7 +125,6 @@ class RemoteModel:
             ),
             max_tokens=max_tok,
             model=model,
-            response_format=resp_format,
         )
         return result, model
 
@@ -139,7 +134,7 @@ class RemoteModel:
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
-        self, system: str, user: str, max_tokens: int, model: str, response_format: dict | None = None
+        self, system: str, user: str, max_tokens: int, model: str
     ) -> str:
         async with httpx.AsyncClient(timeout=20.0) as client:
             payload = {
@@ -149,12 +144,9 @@ class RemoteModel:
                     {"role": "user", "content": user},
                 ],
                 "max_tokens": max_tokens,
-                # Temperature 0.0 for maximum determinism and format compliance
-                "temperature": 0.0,
+                "temperature": 0.1,
                 "top_p": 0.9,
             }
-            if response_format:
-                payload["response_format"] = response_format
 
             resp = await client.post(
                 f"{self.base_url}/chat/completions",

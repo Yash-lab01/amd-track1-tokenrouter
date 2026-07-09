@@ -1,9 +1,9 @@
 {
-  "mode": "local",
+  "mode": "hybrid",
   "accuracy": 1.0,
   "correct": 5,
   "total": 5,
-  "elapsed_s": 11.373332599992864,
+  "elapsed_s": 18.529447499953676,
   "domain_stats": {
     "math": {
       "correct": 1,
@@ -13,11 +13,11 @@
       "correct": 1,
       "total": 1
     },
-    "factual": {
+    "sentiment": {
       "correct": 1,
       "total": 1
     },
-    "sentiment": {
+    "factual": {
       "correct": 1,
       "total": 1
     },
@@ -44,19 +44,19 @@
       "correct": true
     },
     {
-      "task_id": "t1",
-      "domain": "factual",
-      "prompt": "What is the capital of Japan?",
-      "answer": "Tokyo",
-      "expected": "tokyo",
-      "correct": true
-    },
-    {
       "task_id": "t3",
       "domain": "sentiment",
       "prompt": "Classify sentiment: 'The movie was absolutely fantastic!'",
       "answer": "positive",
       "expected": "positive",
+      "correct": true
+    },
+    {
+      "task_id": "t1",
+      "domain": "factual",
+      "prompt": "What is the capital of Japan?",
+      "answer": "Tokyo",
+      "expected": "tokyo",
       "correct": true
     },
     {
