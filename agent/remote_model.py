@@ -13,6 +13,8 @@ import re
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from agent.compressor import DomainCompressor
+
 REMOTE_MAX_TOKENS = {
     "sentiment":     3,
     "factual":      50,
@@ -69,6 +71,7 @@ class RemoteModel:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.allowed_models = [m.strip() for m in allowed_models if m.strip()]
+        self.compressor = DomainCompressor()
         print(f"[RemoteModel] Initialized with {len(self.allowed_models)} allowed models.")
 
     async def generate(
@@ -79,7 +82,7 @@ class RemoteModel:
         upgrade: bool = False,
     ) -> tuple[str, str]:
         """Full remote generation. Returns (answer, model_id)."""
-        compressed = self._prune_prompt(prompt)
+        compressed = self.compressor.compress(prompt, domain)
         system = REMOTE_SYSTEM_PROMPTS.get(domain, "Answer concisely.")
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
         model = self._pick_model(domain, prompt, conf, upgrade=upgrade)
@@ -122,7 +125,7 @@ class RemoteModel:
         result = await self._call(
             system=system,
             user=(
-                f"Task:\n{self._prune_prompt(prompt)}\n\n"
+                f"Task:\n{self.compressor.compress(prompt, domain)}\n\n"
                 f"Local answer:\n{local_answer}\n\nDecision:"
             ),
             max_tokens=max_tok,
@@ -147,7 +150,7 @@ class RemoteModel:
         result = await self._call(
             system=system,
             user=(
-                f"Task:\n{self._prune_prompt(prompt)}\n\n"
+                f"Task:\n{self.compressor.compress(prompt, domain)}\n\n"
                 f"Bad answer:\n{bad_answer}\n\nCorrected answer:"
             ),
             max_tokens=max_tok,
@@ -253,10 +256,3 @@ class RemoteModel:
             if all(tag.lower() in lower for tag in tags):
                 return model
         return None
-
-    def _prune_prompt(self, prompt: str, max_chars: int = 1200) -> str:
-        if len(prompt) <= max_chars:
-            return prompt
-        keep_start = int(max_chars * 0.6)
-        keep_end = max_chars - keep_start
-        return prompt[:keep_start] + "\n[...truncated...]\n" + prompt[-keep_end:]

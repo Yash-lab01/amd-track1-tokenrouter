@@ -3,7 +3,7 @@
   "accuracy": 1.0,
   "correct": 5,
   "total": 5,
-  "elapsed_s": 22.390219399996568,
+  "elapsed_s": 27.844620599993505,
   "domain_stats": {
     "math": {
       "correct": 1,

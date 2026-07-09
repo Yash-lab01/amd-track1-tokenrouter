@@ -6,7 +6,19 @@ Uses a lock so concurrent async tasks don't cause CPU thrashing.
 """
 import os
 import threading
-from llama_cpp import Llama
+from llama_cpp import Llama, LlamaGrammar
+
+NER_GRAMMAR_STRING = r'''
+root ::= ws "{" ws "\"person\"" ws ":" ws stringlist "," ws "\"org\"" ws ":" ws stringlist "," ws "\"location\"" ws ":" ws stringlist "," ws "\"date\"" ws ":" ws stringlist "}"
+stringlist ::= "[" ws "]" | "[" ws string ("," ws string)* "]" ws
+string ::= "\"" [^"]* "\"" ws
+ws ::= [ \t\n]*
+'''
+
+SENTIMENT_GRAMMAR_STRING = r'''
+root ::= ws ("positive" | "negative" | "neutral" | "Positive" | "Negative" | "Neutral")
+ws ::= [ \t\n]*
+'''
 
 # Domain-specific max_tokens for local generation (free, so be generous)
 LOCAL_MAX_TOKENS = {
@@ -93,6 +105,13 @@ class LocalModel:
             verbose=False,
         )
         self._lock = threading.Lock()
+        
+        # Initialize strict grammars
+        self.grammars = {
+            "ner": LlamaGrammar.from_string(NER_GRAMMAR_STRING),
+            "sentiment": LlamaGrammar.from_string(SENTIMENT_GRAMMAR_STRING),
+        }
+        
         print("[LocalModel] Model loaded.")
 
     def generate(self, prompt: str, domain: str = "factual", temperature: float = 0.1) -> str:
@@ -105,6 +124,8 @@ class LocalModel:
 
         full_prompt = f"<start_of_turn>system\n{system}<end_of_turn>\n<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
 
+        grammar = self.grammars.get(domain)
+
         with self._lock:
             output = self.llm(
                 full_prompt,
@@ -112,6 +133,7 @@ class LocalModel:
                 temperature=temperature,
                 top_p=0.9,
                 echo=False,
+                grammar=grammar,
                 stop=["<end_of_turn>", "<start_of_turn>"],
             )
 
