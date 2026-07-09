@@ -17,8 +17,11 @@ from agent.remote_model import RemoteModel
 
 
 CLASSIFIER_CONF_THRESHOLD = 0.65
-LOCAL_TRUST_DOMAINS = {"sentiment", "ner"}
-REMOTE_FIRST_DOMAINS = {"factual", "summarization", "logic", "debugging", "codegen"}
+# NER removed from LOCAL_TRUST: on 2 vCPU, generating 60-100 token JSON takes
+# 12-30 seconds per task and serialises through max_workers=1, causing TIMEOUT.
+# Remote NER with strict JSON system prompt is faster and more accurate.
+LOCAL_TRUST_DOMAINS = {"sentiment"}
+REMOTE_FIRST_DOMAINS = {"factual", "summarization", "logic", "debugging", "codegen", "ner"}
 RETRY_DOMAINS = {"ner", "sentiment", "debugging", "codegen", "math"}
 
 
@@ -59,17 +62,26 @@ class HybridRouter:
 
         local_answer = None
         if self.mode == "local" or self._should_try_local_first(domain, conf):
-            local_answer = await self._generate_local(prompt, domain)
-            is_valid, cleaned = validate(domain, prompt, local_answer)
-            if is_valid:
-                self._trace(domain, conf, "local", "validator-pass", model="local")
-                self._answer_cache[cache_key] = cleaned
-                return cleaned
-            if self.mode == "local":
-                cleaned = postprocess(domain, local_answer)
-                self._trace(domain, conf, "local", "validator-fail-local-only", model="local")
-                self._answer_cache[cache_key] = cleaned
-                return cleaned
+            try:
+                local_answer = await self._generate_local(prompt, domain)
+                is_valid, cleaned = validate(domain, prompt, local_answer)
+                if is_valid:
+                    self._trace(domain, conf, "local", "validator-pass", model="local")
+                    self._answer_cache[cache_key] = cleaned
+                    return cleaned
+                if self.mode == "local":
+                    cleaned = postprocess(domain, local_answer)
+                    self._trace(domain, conf, "local", "validator-fail-local-only", model="local")
+                    self._answer_cache[cache_key] = cleaned
+                    return cleaned
+            except asyncio.TimeoutError:
+                # Local model was too slow — skip it and go remote
+                local_answer = None
+                if self.mode == "local":
+                    # local-only mode with no remote: return empty rather than hang
+                    self._trace(domain, conf, "local", "timeout-local-only", model="local")
+                    self._answer_cache[cache_key] = ""
+                    return ""
 
         answer = await self._remote_or_local_fallback(
             prompt,
@@ -90,14 +102,29 @@ class HybridRouter:
             return False
         return False
 
+    # Max seconds to wait for local model inference before giving up and going remote.
+    # On 2 vCPU grading env, NER/code can take 20-30s — this prevents TIMEOUT.
+    _LOCAL_TIMEOUT_S = 12
+
     async def _generate_local(self, prompt: str, domain: str) -> str:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._local_executor,
-            self.local.generate,
-            prompt,
-            domain,
-        )
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(
+                    self._local_executor,
+                    self.local.generate,
+                    prompt,
+                    domain,
+                ),
+                timeout=self._LOCAL_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            print(
+                f"[WARNING] Local model timed out after {self._LOCAL_TIMEOUT_S}s "
+                f"for domain={domain}. Falling back to remote.",
+                flush=True,
+            )
+            raise  # caller (_remote_or_local_fallback) will catch and use remote
 
     async def _remote_or_local_fallback(
         self,
@@ -129,9 +156,12 @@ class HybridRouter:
             return cleaned
         except Exception as exc:
             print(f"[WARNING] Remote call failed: {exc}. Falling back to local.", flush=True)
-            if local_answer is None:
-                local_answer = await self._generate_local(prompt, domain)
-            fallback = postprocess(domain, local_answer)
+            # Use whatever local answer we already have; do NOT call _generate_local
+            # again here — it could timeout and create an infinite wait.
+            if local_answer is not None:
+                fallback = postprocess(domain, local_answer)
+            else:
+                fallback = ""
             self._trace(domain, conf, "local", "remote-failed", model="local")
             return fallback
 

@@ -83,11 +83,26 @@ class RemoteModel:
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
         model = self._pick_model(domain, prompt, conf, upgrade=upgrade)
 
+        # Append domain-specific format hints to the user prompt
+        format_hint = ""
+        if domain == "factual":
+            format_hint = "\n\nDirect answer only (one word or short phrase):"
+        elif domain == "logic":
+            format_hint = "\n\nFinal answer (Yes or No, then brief reason if needed):"
+        elif domain == "sentiment":
+            format_hint = "\n\nLabel (positive, negative, or neutral):"
+        elif domain == "ner":
+            # For NER, we use native JSON mode
+            pass
+
+        resp_format = {"type": "json_object"} if domain == "ner" else None
+
         result = await self._call(
             system=system,
-            user=f"Task:\n{compressed}\n\nAnswer:",
+            user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
             max_tokens=max_tok,
             model=model,
+            response_format=resp_format,
         )
         return result, model
 
@@ -105,6 +120,7 @@ class RemoteModel:
             "Fix the answer. Return only the corrected answer with no explanation.",
         )
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
+        resp_format = {"type": "json_object"} if domain == "ner" else None
         result = await self._call(
             system=system,
             user=(
@@ -113,6 +129,7 @@ class RemoteModel:
             ),
             max_tokens=max_tok,
             model=model,
+            response_format=resp_format,
         )
         return result, model
 
@@ -122,25 +139,30 @@ class RemoteModel:
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
-        self, system: str, user: str, max_tokens: int, model: str
+        self, system: str, user: str, max_tokens: int, model: str, response_format: dict | None = None
     ) -> str:
         async with httpx.AsyncClient(timeout=20.0) as client:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "max_tokens": max_tokens,
+                # Temperature 0.0 for maximum determinism and format compliance
+                "temperature": 0.0,
+                "top_p": 0.9,
+            }
+            if response_format:
+                payload["response_format"] = response_format
+
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "max_tokens": max_tokens,
-                    "temperature": 0.1,
-                    "top_p": 0.9,
-                },
+                json=payload,
             )
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
@@ -188,6 +210,10 @@ class RemoteModel:
         upgrade: bool = False,
     ) -> str:
         difficulty = self._score_difficulty(prompt, conf)
+        
+        if domain == "logic":
+            upgrade = True
+
         use_upgrade = upgrade or difficulty >= 2
 
         if use_upgrade and domain in HARD_DOMAIN_UPGRADE:
