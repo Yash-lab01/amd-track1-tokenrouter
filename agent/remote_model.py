@@ -44,22 +44,23 @@ RETRY_SYSTEM_PROMPTS = {
 }
 
 # Preference tags matched against ALLOWED_MODELS (first match wins per tier)
+# Prioritize 26b (serverless), kimi, minimax. Push 31b (throws 404) to the end.
 DOMAIN_MODEL_PREFS: dict[str, list[list[str]]] = {
     "sentiment": [["gemma", "26b"], ["gemma"]],
     "math": [["gemma", "26b"], ["gemma"]],
     "ner": [["gemma", "26b"], ["gemma"]],
-    "factual": [["gemma", "26b"], ["minimax"], ["gemma", "31b"], ["gemma"]],
+    "factual": [["gemma", "26b"], ["minimax"], ["gemma", "31b"]],
     "summarization": [["gemma", "26b"], ["gemma", "nvfp4"], ["gemma", "31b"]],
-    "logic": [["minimax"], ["gemma", "31b"], ["gemma", "26b"], ["gemma"]],
-    "debugging": [["kimi"], ["gemma", "31b"], ["gemma"]],
-    "codegen": [["kimi"], ["gemma", "31b"], ["gemma"]],
+    "logic": [["minimax"], ["gemma", "26b"], ["gemma", "31b"], ["gemma"]],
+    "debugging": [["kimi"], ["gemma", "26b"], ["gemma", "31b"], ["gemma"]],
+    "codegen": [["kimi"], ["gemma", "26b"], ["gemma", "31b"], ["gemma"]],
 }
 
 HARD_DOMAIN_UPGRADE: dict[str, list[list[str]]] = {
-    "factual": [["minimax"], ["gemma", "31b"], ["gemma", "26b"]],
-    "logic": [["minimax"], ["gemma", "31b"], ["gemma", "26b"]],
-    "summarization": [["gemma", "31b"], ["gemma", "26b"]],
-    "math": [["gemma", "31b"], ["gemma", "26b"]],
+    "factual": [["minimax"], ["gemma", "26b"], ["gemma", "31b"]],
+    "logic": [["minimax"], ["gemma", "26b"], ["gemma", "31b"]],
+    "summarization": [["gemma", "26b"], ["gemma", "31b"]],
+    "math": [["gemma", "26b"], ["gemma", "31b"]],
 }
 
 
@@ -98,6 +99,32 @@ class RemoteModel:
         result = await self._call(
             system=system,
             user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
+            max_tokens=max_tok,
+            model=model,
+        )
+        return result, model
+
+    async def audit(
+        self,
+        prompt: str,
+        domain: str,
+        local_answer: str,
+        conf: float = 1.0,
+    ) -> tuple[str, str]:
+        """Audits a local answer. Returns ([APPROVE] or corrected answer, model_id)."""
+        model = self._pick_model(domain, prompt, conf, upgrade=True)
+        system = (
+            "You are an Auditor. Check if the provided local answer is 100% correct and follows all formatting rules exactly. "
+            "If it is perfect, reply exactly with '[APPROVE]' and nothing else. "
+            "If it is flawed, reply with the fully corrected answer and nothing else."
+        )
+        max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
+        result = await self._call(
+            system=system,
+            user=(
+                f"Task:\n{self._prune_prompt(prompt)}\n\n"
+                f"Local answer:\n{local_answer}\n\nDecision:"
+            ),
             max_tokens=max_tok,
             model=model,
         )
@@ -218,7 +245,7 @@ class RemoteModel:
             if model:
                 return model
 
-        return self.allowed_models[0] if self.allowed_models else "accounts/fireworks/models/gemma-4-31b-it"
+        return self.allowed_models[0] if self.allowed_models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
 
     def _find_model(self, tags: list[str]) -> str | None:
         for model in self.allowed_models:

@@ -95,7 +95,7 @@ class LocalModel:
         self._lock = threading.Lock()
         print("[LocalModel] Model loaded.")
 
-    def generate(self, prompt: str, domain: str = "factual") -> str:
+    def generate(self, prompt: str, domain: str = "factual", temperature: float = 0.1) -> str:
         """
         Thread-safe local generation.
         Uses domain-specific system prompt and token caps.
@@ -109,7 +109,7 @@ class LocalModel:
             output = self.llm(
                 full_prompt,
                 max_tokens=max_tokens,
-                temperature=0.1,
+                temperature=temperature,
                 top_p=0.9,
                 echo=False,
                 stop=["<end_of_turn>", "<start_of_turn>"],

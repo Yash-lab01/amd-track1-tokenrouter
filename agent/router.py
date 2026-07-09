@@ -24,6 +24,24 @@ LOCAL_TRUST_DOMAINS = {"sentiment"}
 REMOTE_FIRST_DOMAINS = {"factual", "summarization", "logic", "debugging", "codegen", "ner"}
 RETRY_DOMAINS = {"ner", "sentiment", "debugging", "codegen", "math"}
 
+_SPATIAL_CONSTRAINT_KEYWORDS = [
+    "immediately to the left", "immediately to the right",
+    "directly to the left", "directly to the right",
+    "left of", "right of", "adjacent to", "next to",
+    "in a row", "sit in a row", "sit in a line", "stand in a line",
+    "sits beside", "sit beside", "seated beside",
+    "rightmost", "leftmost", "far left", "far right",
+    "at one end", "at either end", "in position",
+    "directly behind", "immediately behind", "directly in front of"
+]
+
+def _is_spatial_puzzle(prompt: str) -> bool:
+    lowered = prompt.lower()
+    if any(marker in lowered for marker in ["function", "python", "code", "implement", "def ", "class ", "algorithm", "bug"]):
+        return False
+    return any(keyword in lowered for keyword in _SPATIAL_CONSTRAINT_KEYWORDS)
+
+
 
 class HybridRouter:
     def __init__(
@@ -49,6 +67,14 @@ class HybridRouter:
 
         domain, conf = self.classifier.classify(prompt)
 
+        # SPATIAL PUZZLE INTERCEPT:
+        # The local model is notoriously bad at spatial constraints (silent logic failures).
+        # If detected, force the domain to 'logic' (which is REMOTE_FIRST) to bypass local completely.
+        if _is_spatial_puzzle(prompt):
+            domain = "logic"
+            conf = 1.0
+
+
         if self.mode == "remote":
             answer = await self._remote_or_local_fallback(prompt, domain, conf, None, "remote-only")
             self._answer_cache[cache_key] = answer
@@ -64,7 +90,27 @@ class HybridRouter:
         if self.mode == "local" or self._should_try_local_first(domain, conf):
             try:
                 local_answer = await self._generate_local(prompt, domain)
-                is_valid, cleaned = validate(domain, prompt, local_answer)
+
+                # Math Self-Consistency Check (Two-Pass Verification)
+                if domain == "math" and local_answer:
+                    import re
+                    ans1_nums = re.findall(r"[-+]?\d*\.\d+|\d+", local_answer)
+                    ans1 = ans1_nums[-1] if ans1_nums else None
+                    if ans1:
+                        try:
+                            second_ans = await self._generate_local(prompt, domain, temperature=0.7)
+                            ans2_nums = re.findall(r"[-+]?\d*\.\d+|\d+", second_ans)
+                            ans2 = ans2_nums[-1] if ans2_nums else None
+                            if ans1 != ans2:
+                                # Answers disagree, local model is hallucinating. Discard local answer.
+                                self._trace(domain, conf, "local", "math-consistency-failed", model="local")
+                                local_answer = None
+                        except asyncio.TimeoutError:
+                            # Not enough time for second pass; trust the first answer to save tokens
+                            pass
+
+                if local_answer is not None:
+                    is_valid, cleaned = validate(domain, prompt, local_answer)
                 if is_valid:
                     self._trace(domain, conf, "local", "validator-pass", model="local")
                     self._answer_cache[cache_key] = cleaned
@@ -106,7 +152,7 @@ class HybridRouter:
     # On 2 vCPU grading env, NER/code can take 20-30s — this prevents TIMEOUT.
     _LOCAL_TIMEOUT_S = 12
 
-    async def _generate_local(self, prompt: str, domain: str) -> str:
+    async def _generate_local(self, prompt: str, domain: str, temperature: float = 0.1) -> str:
         loop = asyncio.get_event_loop()
         try:
             return await asyncio.wait_for(
@@ -115,6 +161,7 @@ class HybridRouter:
                     self.local.generate,
                     prompt,
                     domain,
+                    temperature
                 ),
                 timeout=self._LOCAL_TIMEOUT_S,
             )
@@ -134,8 +181,31 @@ class HybridRouter:
         local_answer: str | None,
         reason: str,
     ) -> str:
+        # Phase 6: The Lean Auditor
+        # If we don't have a local answer, try to generate one to feed to the auditor.
+        # Skip spatial puzzles because we know the local model fails silently on them.
+        if local_answer is None and not _is_spatial_puzzle(prompt):
+            try:
+                local_ans = await self._generate_local(prompt, domain)
+                is_val, cleaned_local = validate(domain, prompt, local_ans)
+                local_answer = cleaned_local if is_val else postprocess(domain, local_ans)
+            except asyncio.TimeoutError:
+                pass # Proceed to standard generation without auditor
+
         try:
-            answer, model = await self.remote.generate(prompt, domain, conf=conf)
+            if local_answer is not None:
+                # Audit the local answer
+                audit_answer, model = await self.remote.audit(prompt, domain, local_answer, conf=conf)
+                if "[APPROVE]" in audit_answer:
+                    self._trace(domain, conf, "remote-auditor", f"{reason}-audited-approved", model=model)
+                    return local_answer
+                
+                # If not approved, the auditor returned the corrected text
+                answer = audit_answer
+                reason = f"{reason}-audited-replaced"
+            else:
+                answer, model = await self.remote.generate(prompt, domain, conf=conf)
+
             is_valid, cleaned = validate(domain, prompt, answer)
 
             if not is_valid and domain in RETRY_DOMAINS:
@@ -157,9 +227,9 @@ class HybridRouter:
         except Exception as exc:
             print(f"[WARNING] Remote call failed: {exc}. Falling back to local.", flush=True)
             if local_answer is not None:
-                fallback = postprocess(domain, local_answer)
+                fallback = local_answer
             else:
-                # We do not have a local answer because it was REMOTE_FIRST.
+                # We do not have a local answer because it was a spatial puzzle, or local timed out earlier.
                 # We MUST generate one now, or else we return an empty string and score 0.
                 try:
                     local_ans = await self._generate_local(prompt, domain)
