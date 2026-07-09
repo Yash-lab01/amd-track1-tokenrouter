@@ -42,23 +42,29 @@ The result: **up to 80% reduction in remote API token consumption** compared to 
 
 ## 🏗️ Architecture
 
-```
+```text
 Prompt
   │
   ▼
 [TF-IDF Domain Classifier] ──── detects task type (math / code / NER / etc.)
   │
+  ├──▶ [Spatial Puzzle Interceptor]         (Logic puzzles forced to remote)
+  │
   ├──▶ [Tier 0: SymPy Direct Solver]        (math/algebra → 0 LLM tokens)
   │
-  ├──▶ [Tier 1/2: Local Gemma-2B-Instruct]  (quantized GGUF → 0 remote tokens)
+  ├──▶ [Zero-Dependency Input Compressor]   (TF-IDF summarizer + Markdown stripper)
+  │
+  ├──▶ [Tier 1/2: Local Gemma-2B-Instruct]  (Strict GBNF Grammars → 0 remote tokens)
+  │         │
+  │         ├──▶ [Math Self-Consistency]    (Two-pass verification for math)
   │         │
   │         └──▶ [Programmatic Validator]   (checks Python syntax, JSON keys, etc.)
   │                    │
   │                    ├── VALID  → Return answer ✅
   │                    └── INVALID → escalate to Tier 3
   │
-  └──▶ [Tier 3: Remote Fireworks AI]        (speculative correction → minimal tokens)
-            sends local draft + prompt, remote only validates/corrects
+  └──▶ [Tier 3: The Lean Auditor]           (Remote Fireworks AI)
+            Audits local answers ("Approve or Replace") → saves ~90% output tokens
 ```
 
 ### Key Components
@@ -66,8 +72,10 @@ Prompt
 | File | Purpose |
 |------|---------|
 | `agent/classifier.py` | TF-IDF domain classifier (< 10MB, < 1ms inference) |
-| `agent/local_model.py` | Thread-safe Gemma-2B wrapper via llama-cpp-python |
-| `agent/router.py` | Core routing logic and tier escalation |
+| `agent/compressor.py` | Zero-dependency prompt compressor (TF-IDF + Regex) |
+| `agent/local_model.py` | Thread-safe Gemma-2B wrapper with GBNF Grammars |
+| `agent/remote_model.py`| Remote API client with the "Approve or Replace" Auditor |
+| `agent/router.py` | Core routing logic, spatial intercepts, and tier escalation |
 | `agent/evaluator.py` | Direct solvers (SymPy math, regex, etc.) |
 | `agent/validator.py` | Output validation per domain |
 | `streamlit_app.py` | Glassmorphic Streamlit web UI with live diagnostics |
@@ -277,14 +285,17 @@ To deploy your own copy:
 
 | Decision | Rationale |
 |----------|-----------|
-| **TF-IDF classifier** (not Transformers) | < 10MB RAM, < 1ms inference, keeps Docker image small |
-| **llama-cpp-python** (not Ollama) | Runs directly in Docker, no separate service needed |
+| **The Lean Auditor** | Remote model audits local answers instead of generating from scratch. Saves ~90% of Fireworks output tokens per task. |
+| **GBNF Grammars** | Forces local model to output 100% valid JSON and exact labels, eliminating format-based validator failures. |
+| **Zero-Dependency Compressor** | Uses scikit-learn TF-IDF to summarize prompts before API calls, saving 40%+ input tokens without heavy PyTorch bloat. |
+| **Math Self-Consistency** | Double-checks local math answers via multi-pass sampling to catch silent hallucinations before they are returned. |
+| **Spatial Interceptor** | Pre-emptively routes spatial/positional puzzles to remote models, bypassing the local model's known weaknesses. |
+| **TF-IDF classifier** | < 10MB RAM, < 1ms inference, keeps Docker image small |
+| **llama-cpp-python** | Runs directly in Docker, no separate service needed |
 | **Gemma-2B GGUF** local model | Qualifies for Gemma bonus prize, Apache 2.0 license |
-| **Speculative remote correction** | Sends local draft to remote for verify-only — saves ~70% output tokens |
-| **Async semaphore** (limit 10) | Prevents timeout on large task sets while avoiding CPU thrashing |
+| **Async semaphore** | Prevents timeout on large task sets while avoiding CPU thrashing |
 | **Pre-baked classifier pickle** | Zero training cost at container startup |
 | **Direct SymPy solver** | Math/algebra solved with 0 LLM tokens at all |
-| **Prebuilt llama-cpp-python wheel** | Skips 20+ minute C++ compilation in Docker |
 
 ---
 
