@@ -4,9 +4,13 @@ local_model.py
 Thread-safe wrapper around llama-cpp-python for CPU inference.
 Uses a lock so concurrent async tasks don't cause CPU thrashing.
 """
+import math
 import os
 import threading
 from llama_cpp import Llama, LlamaGrammar
+
+class LowConfidenceError(Exception):
+    pass
 
 NER_GRAMMAR_STRING = r'''
 root ::= ws "{" ws "\"person\"" ws ":" ws stringlist "," ws "\"org\"" ws ":" ws stringlist "," ws "\"location\"" ws ":" ws stringlist "," ws "\"date\"" ws ":" ws stringlist "}"
@@ -85,7 +89,7 @@ class LocalModel:
         if model_path is None:
             model_path = os.environ.get(
                 "LOCAL_MODEL_PATH",
-                "./models/gemma-2b-instruct-q4.gguf"
+                "./models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
             )
 
         if not os.path.exists(model_path):
@@ -103,6 +107,7 @@ class LocalModel:
             use_mmap=True,           # Use memory-mapping to let OS page weights in/out dynamically
             use_mlock=False,         # Do not lock memory (keeps physical RAM usage minimal)
             verbose=False,
+            logits_all=True,         # REQUIRED to fetch logprobs during generate()
         )
         self._lock = threading.Lock()
         
@@ -114,10 +119,11 @@ class LocalModel:
         
         print("[LocalModel] Model loaded.")
 
-    def generate(self, prompt: str, domain: str = "factual", temperature: float = 0.1) -> str:
+    def generate(self, prompt: str, domain: str = "factual", temperature: float = 0.1, min_confidence: float = 0.75) -> str:
         """
         Thread-safe local generation.
         Uses domain-specific system prompt and token caps.
+        Calculates average logprob confidence; if below min_confidence, raises LowConfidenceError.
         """
         system = SYSTEM_PROMPTS.get(domain, SYSTEM_PROMPTS["factual"])
         max_tokens = LOCAL_MAX_TOKENS.get(domain, 128)
@@ -135,9 +141,28 @@ class LocalModel:
                 echo=False,
                 grammar=grammar,
                 stop=["<end_of_turn>", "<start_of_turn>"],
+                logprobs=1,
             )
 
-        return output["choices"][0]["text"].strip()
+        choice = output["choices"][0]
+        text = choice["text"].strip()
+        
+        # Calculate logprob confidence if requested and available
+        if min_confidence > 0 and "logprobs" in choice and choice["logprobs"] is not None:
+            token_logprobs = choice["logprobs"].get("token_logprobs", [])
+            # Filter out None values which can occur for special tokens
+            valid_logprobs = [lp for lp in token_logprobs if lp is not None]
+            
+            if valid_logprobs:
+                avg_logprob = sum(valid_logprobs) / len(valid_logprobs)
+                confidence = math.exp(avg_logprob)
+                print(f"[LocalModel] domain={domain} average_confidence={confidence:.3f}")
+                if confidence < min_confidence:
+                    raise LowConfidenceError(f"Confidence {confidence:.3f} is below threshold {min_confidence}")
+            else:
+                print(f"[LocalModel] domain={domain} warning: no valid logprobs returned")
+
+        return text
 
     def count_tokens(self, text: str) -> int:
         """Count tokens locally — used to prune remote prompts."""

@@ -67,5 +67,20 @@
 
   {"task_id":"sum1","domain":"summarization","prompt":"Summarize in 2 sentences:\nArtificial intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn. AI has applications in many fields including medicine, finance, and transportation. Modern AI systems use neural networks trained on large datasets to perform tasks such as image recognition, language translation, and decision-making. The rapid advancement of AI has raised both exciting opportunities and significant ethical questions about privacy, employment, and autonomous decision-making.","expected":""},
   {"task_id":"sum2","domain":"summarization","prompt":"Give a brief summary:\nThe Amazon rainforest is the world's largest tropical rainforest, covering over 5.5 million square kilometers across nine countries in South America. It is home to an estimated 10% of all species on Earth and plays a crucial role in regulating the global climate by absorbing vast amounts of carbon dioxide. However, deforestation driven by agriculture, logging, and infrastructure development has destroyed significant portions of the forest, threatening both biodiversity and climate stability.","expected":""},
-  {"task_id":"sum3","domain":"summarization","prompt":"Summarize this in one sentence:\nThe Industrial Revolution, which began in Britain in the late 18th century, transformed manufacturing processes through the introduction of machinery, steam power, and factory systems. This period of rapid industrialization fundamentally changed how goods were produced and led to massive urbanization as workers moved from rural areas to cities to find employment in factories.","expected":""}
+  {"task_id":"sum3","domain":"summarization","prompt":"Summarize this in one sentence:\nThe Industrial Revolution, which began in Britain in the late 18th century, transformed manufacturing processes through the introduction of machinery, steam power, and factory systems. This period of rapid industrialization fundamentally changed how goods were produced and led to massive urbanization as workers moved from rural areas to cities to find employment in factories.","expected":""},
+  
+  {"task_id":"m13","domain":"math","prompt":"If a bacteria population doubles every 12 hours, and starts with 100 bacteria, how many will there be after exactly 3 days?","expected":"6400"},
+  {"task_id":"m14","domain":"math","prompt":"Solve for x in the equation: 3(x - 4) + 5 = 2(x + 1)","expected":"9"},
+  {"task_id":"m15","domain":"math","prompt":"What is the derivative of x^3 + 2x^2 - 5x + 1 with respect to x evaluated at x = 2?","expected":"15"},
+  {"task_id":"m16","domain":"math","prompt":"If a train leaves Station A at 60 mph and another leaves Station B at 90 mph heading towards each other, and they are 300 miles apart, how long until they meet in hours?","expected":"2"},
+  {"task_id":"m17","domain":"math","prompt":"I have 60 more apples than oranges. If I have 100 fruits in total, how many oranges do I have?","expected":"20"},
+  {"task_id":"m18","domain":"math","prompt":"Evaluate the definite integral of 2x dx from 0 to 3.","expected":"9"},
+
+  {"task_id":"l9","domain":"logic","prompt":"A knight always tells the truth, and a knave always lies. A says 'I am a knave'. Is A a knight, a knave, or is this impossible?","expected":"impossible"},
+  {"task_id":"l10","domain":"logic","prompt":"Sally has 3 brothers. Each brother has 2 sisters. How many sisters does Sally have?","expected":"1"},
+  {"task_id":"l11","domain":"logic","prompt":"Mary's father has 5 daughters: 1. Nana, 2. Nene, 3. Nini, 4. Nono. What is the name of the fifth daughter?","expected":"Mary"},
+  {"task_id":"l12","domain":"logic","prompt":"If you pass the person in second place in a race, what place are you in?","expected":"second"},
+  {"task_id":"l13","domain":"logic","prompt":"There are 5 people in a room. You go in and kill 4 of those 5. How many people are left in that room?","expected":"6"},
+  
+  {"task_id":"n8","domain":"ner","prompt":"Extract entities: 'The Cupertino headquarters of Apple will host Tim Cook on Tuesday.'","expected_keys":["person","org","location","date"]}
 ]

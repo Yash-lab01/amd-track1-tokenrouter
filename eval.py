@@ -61,6 +61,8 @@ def fuzzy_match(predicted: str, expected: str) -> bool:
     """Case-insensitive, whitespace-normalized answer matching."""
     p = predicted.lower().strip()
     e = expected.lower().strip()
+    if not p or not e:
+        return False
     return e in p or p in e or p == e
 
 
@@ -101,7 +103,7 @@ async def run_eval(
 
     api_key = os.environ.get("FIREWORKS_API_KEY", "")
     base_url = os.environ.get("FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1")
-    allowed_models = os.environ.get("ALLOWED_MODELS", "accounts/fireworks/models/gemma2-9b-it").split(",")
+    allowed_models = os.environ.get("ALLOWED_MODELS", "accounts/fireworks/models/deepseek-v4-pro").split(",")
     router = HybridRouter(api_key, base_url, allowed_models, mode=mode)
 
     correct = 0

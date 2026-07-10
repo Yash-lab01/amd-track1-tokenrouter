@@ -17,13 +17,13 @@ from agent.compressor import DomainCompressor
 
 REMOTE_MAX_TOKENS = {
     "sentiment":     3,
-    "factual":      50,
-    "math":         60,
+    "factual":      100,
+    "math":         250,
     "ner":          120,
     "summarization": 130,
     "debugging":    350,
     "codegen":      450,
-    "logic":        160,
+    "logic":        250,
 }
 
 REMOTE_SYSTEM_PROMPTS = {
@@ -104,34 +104,11 @@ class RemoteModel:
             user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
             max_tokens=max_tok,
             model=model,
+            reasoning=False, # Dual-sweep: first try with reasoning off
         )
         return result, model
 
-    async def audit(
-        self,
-        prompt: str,
-        domain: str,
-        local_answer: str,
-        conf: float = 1.0,
-    ) -> tuple[str, str]:
-        """Audits a local answer. Returns ([APPROVE] or corrected answer, model_id)."""
-        model = self._pick_model(domain, prompt, conf, upgrade=True)
-        system = (
-            "You are an Auditor. Check if the provided local answer is 100% correct and follows all formatting rules exactly. "
-            "If it is perfect, reply exactly with '[APPROVE]' and nothing else. "
-            "If it is flawed, reply with the fully corrected answer and nothing else."
-        )
-        max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
-        result = await self._call(
-            system=system,
-            user=(
-                f"Task:\n{self.compressor.compress(prompt, domain)}\n\n"
-                f"Local answer:\n{local_answer}\n\nDecision:"
-            ),
-            max_tokens=max_tok,
-            model=model,
-        )
-        return result, model
+
 
     async def generate_correction(
         self,
@@ -155,6 +132,7 @@ class RemoteModel:
             ),
             max_tokens=max_tok,
             model=model,
+            reasoning=True, # Dual-sweep: validation failed, so we buy intelligence now
         )
         return result, model
 
@@ -164,7 +142,7 @@ class RemoteModel:
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
-        self, system: str, user: str, max_tokens: int, model: str
+        self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False, disable_reasoning_param: bool = False
     ) -> str:
         async with httpx.AsyncClient(timeout=20.0) as client:
             payload = {
@@ -177,6 +155,9 @@ class RemoteModel:
                 "temperature": 0.1,
                 "top_p": 0.9,
             }
+            
+            if not reasoning and not disable_reasoning_param:
+                payload["reasoning_effort"] = "none"
 
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -186,6 +167,12 @@ class RemoteModel:
                 },
                 json=payload,
             )
+            
+            # Some models reject reasoning_effort with a 400 Bad Request
+            if resp.status_code == 400 and not reasoning and not disable_reasoning_param:
+                print(f"[RemoteModel] 400 Bad Request with reasoning_effort=none, retrying without it for {model}", flush=True)
+                return await self._call(system, user, max_tokens, model, reasoning=False, disable_reasoning_param=True)
+                
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
 
