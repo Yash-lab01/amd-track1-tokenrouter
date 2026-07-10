@@ -11,6 +11,9 @@ class DomainCompressor:
         self.vectorizer = TfidfVectorizer(stop_words='english')
 
     def compress(self, prompt: str, domain: str, max_chars: int = 1200) -> str:
+        if domain in {"logic", "math"}:
+            return self._preserve_reasoning_prompt(prompt, max_chars=2400)
+
         # 1. Base Cleanup (Whitespace & Markdown)
         cleaned = self._safe_cleanup(prompt)
 
@@ -28,6 +31,15 @@ class DomainCompressor:
             cleaned = cleaned[:keep_start] + "\n\n[...truncated...]\n\n" + cleaned[-keep_end:]
 
         return cleaned
+
+    def _preserve_reasoning_prompt(self, prompt: str, max_chars: int) -> str:
+        """Keep logic/math wording intact; only trim if it is truly huge."""
+        text = prompt.strip()
+        if len(text) <= max_chars:
+            return text
+        keep_start = int(max_chars * 0.55)
+        keep_end = max_chars - keep_start
+        return text[:keep_start] + "\n\n[...middle omitted...]\n\n" + text[-keep_end:]
 
     def _safe_cleanup(self, prompt: str) -> str:
         """Removes excessive markdown and whitespace without touching code blocks."""

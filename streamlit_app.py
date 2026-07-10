@@ -338,7 +338,7 @@ with col_left:
 
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(router.route_async(user_prompt))
+                result, metadata = loop.run_until_complete(router.route_async(user_prompt))
                 t_elapsed = time.perf_counter() - t_start
 
                 from agent.evaluator import try_solve_locally

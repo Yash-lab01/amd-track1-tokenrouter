@@ -34,7 +34,7 @@ async def process_task(task: dict, router: HybridRouter, semaphore: asyncio.Sema
 
         try:
             start = time.monotonic()
-            answer = await router.route_async(prompt)
+            answer, metadata = await router.route_async(prompt)
             elapsed = time.monotonic() - start
             print(f"  [{elapsed:.2f}s] task_id={task_id} len={len(answer)}", flush=True)
             return {"task_id": task_id, "answer": answer}
@@ -73,7 +73,14 @@ async def main():
     # ── Credentials from env (injected by harness) ────────────────────
     api_key        = os.environ.get("FIREWORKS_API_KEY", "")
     base_url       = os.environ.get("FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1")
-    allowed_models = os.environ.get("ALLOWED_MODELS", "accounts/fireworks/models/gemma2-9b-it").split(",")
+    default_allowed = (
+        "accounts/fireworks/models/minimax-m3,"
+        "accounts/fireworks/models/kimi-k2p7-code,"
+        "accounts/fireworks/models/gemma-4-31b-it,"
+        "accounts/fireworks/models/gemma-4-26b-a4b-it,"
+        "accounts/fireworks/models/gemma-4-31b-it-nvfp4"
+    )
+    allowed_models = os.environ.get("ALLOWED_MODELS", default_allowed).split(",")
 
     if not api_key:
         print("[WARNING] FIREWORKS_API_KEY not set — remote calls will fail.", file=sys.stderr)

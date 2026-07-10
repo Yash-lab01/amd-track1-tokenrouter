@@ -103,7 +103,14 @@ async def run_eval(
 
     api_key = os.environ.get("FIREWORKS_API_KEY", "")
     base_url = os.environ.get("FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1")
-    allowed_models = os.environ.get("ALLOWED_MODELS", "accounts/fireworks/models/deepseek-v4-pro").split(",")
+    default_allowed = (
+        "accounts/fireworks/models/minimax-m3,"
+        "accounts/fireworks/models/kimi-k2p7-code,"
+        "accounts/fireworks/models/gemma-4-31b-it,"
+        "accounts/fireworks/models/gemma-4-26b-a4b-it,"
+        "accounts/fireworks/models/gemma-4-31b-it-nvfp4"
+    )
+    allowed_models = os.environ.get("ALLOWED_MODELS", default_allowed).split(",")
     router = HybridRouter(api_key, base_url, allowed_models, mode=mode)
 
     correct = 0
@@ -116,7 +123,7 @@ async def run_eval(
     async def run_one(test):
         nonlocal correct
         async with semaphore:
-            answer = await router.route_async(test["prompt"])
+            answer, metadata = await router.route_async(test["prompt"])
 
         ok = check_correct(test, answer)
         if ok:
@@ -135,6 +142,7 @@ async def run_eval(
                 "answer": answer,
                 "expected": test.get("expected", ""),
                 "correct": ok,
+                "metadata": metadata,
             }
         )
 

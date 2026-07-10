@@ -72,6 +72,7 @@ class RemoteModel:
         self.base_url = base_url.rstrip("/")
         self.allowed_models = [m.strip() for m in allowed_models if m.strip()]
         self.compressor = DomainCompressor()
+        self.bad_models = set()
         print(f"[RemoteModel] Initialized with {len(self.allowed_models)} allowed models.")
 
     async def generate(
@@ -85,7 +86,7 @@ class RemoteModel:
         compressed = self.compressor.compress(prompt, domain)
         system = REMOTE_SYSTEM_PROMPTS.get(domain, "Answer concisely.")
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
-        model = self._pick_model(domain, prompt, conf, upgrade=upgrade)
+        models = self._pick_models(domain, prompt, conf, upgrade=upgrade)
 
         # Append domain-specific format hints to the user prompt
         format_hint = ""
@@ -99,14 +100,34 @@ class RemoteModel:
             # For NER, we use native JSON mode
             pass
 
-        result = await self._call(
-            system=system,
-            user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
-            max_tokens=max_tok,
-            model=model,
-            reasoning=False, # Dual-sweep: first try with reasoning off
-        )
-        return result, model
+        last_exc = None
+        for model in models:
+            try:
+                result = await self._call(
+                    system=system,
+                    user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
+                    max_tokens=max_tok,
+                    model=model,
+                    reasoning=False, # Dual-sweep: first try with reasoning off
+                )
+                return result, model
+            except httpx.HTTPStatusError as e:
+                # E.g., 404 Not Found if model is completely broken/unauthorized
+                if e.response.status_code in (404, 401, 403, 400):
+                    print(f"[RemoteModel] Model {model} returned {e.response.status_code}. Adding to bad_models.", flush=True)
+                    self.bad_models.add(model)
+                    last_exc = e
+                    continue
+                last_exc = e
+                # Other HTTP errors (500) will be retried by tenacity, but if they still fail, we cascade
+                print(f"[RemoteModel] Model {model} failed with {e.response.status_code} after retries. Cascading.", flush=True)
+                continue
+            except Exception as e:
+                print(f"[RemoteModel] Model {model} failed: {e}. Cascading.", flush=True)
+                last_exc = e
+                continue
+        
+        raise last_exc or Exception("All remote models failed")
 
 
 
@@ -118,23 +139,42 @@ class RemoteModel:
         conf: float = 1.0,
     ) -> tuple[str, str]:
         """Retry with a stricter prompt and stronger model."""
-        model = self._pick_model(domain, prompt, conf, upgrade=True)
+        models = self._pick_models(domain, prompt, conf, upgrade=True)
         system = RETRY_SYSTEM_PROMPTS.get(
             domain,
             "Fix the answer. Return only the corrected answer with no explanation.",
         )
         max_tok = REMOTE_MAX_TOKENS.get(domain, 100)
-        result = await self._call(
-            system=system,
-            user=(
-                f"Task:\n{self.compressor.compress(prompt, domain)}\n\n"
-                f"Bad answer:\n{bad_answer}\n\nCorrected answer:"
-            ),
-            max_tokens=max_tok,
-            model=model,
-            reasoning=True, # Dual-sweep: validation failed, so we buy intelligence now
-        )
-        return result, model
+        
+        last_exc = None
+        for model in models:
+            try:
+                result = await self._call(
+                    system=system,
+                    user=(
+                        f"Task:\n{self.compressor.compress(prompt, domain)}\n\n"
+                        f"Bad answer:\n{bad_answer}\n\nCorrected answer:"
+                    ),
+                    max_tokens=max_tok,
+                    model=model,
+                    reasoning=True, # Dual-sweep: validation failed, so we buy intelligence now
+                )
+                return result, model
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (404, 401, 403, 400):
+                    print(f"[RemoteModel] Correction model {model} returned {e.response.status_code}. Adding to bad_models.", flush=True)
+                    self.bad_models.add(model)
+                    last_exc = e
+                    continue
+                last_exc = e
+                print(f"[RemoteModel] Correction model {model} failed with {e.response.status_code}. Cascading.", flush=True)
+                continue
+            except Exception as e:
+                print(f"[RemoteModel] Correction model {model} failed: {e}. Cascading.", flush=True)
+                last_exc = e
+                continue
+                
+        raise last_exc or Exception("All remote correction models failed")
 
     @retry(
         stop=stop_after_attempt(3),
@@ -211,13 +251,13 @@ class RemoteModel:
             score += 1
         return score
 
-    def _pick_model(
+    def _pick_models(
         self,
         domain: str,
         prompt: str,
         conf: float,
         upgrade: bool = False,
-    ) -> str:
+    ) -> list[str]:
         difficulty = self._score_difficulty(prompt, conf)
         
         if domain == "logic":
@@ -230,12 +270,22 @@ class RemoteModel:
         else:
             tiers = DOMAIN_MODEL_PREFS.get(domain, [["gemma", "26b"], ["gemma"]])
 
+        selected = []
         for tags in tiers:
             model = self._find_model(tags)
-            if model:
-                return model
+            if model and model not in self.bad_models and model not in selected:
+                selected.append(model)
 
-        return self.allowed_models[0] if self.allowed_models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
+        # Always append all other allowed models as a final safety net
+        for m in self.allowed_models:
+            if m not in self.bad_models and m not in selected:
+                selected.append(m)
+
+        if not selected:
+            # Absolute fallback if all allowed models were marked bad (should never happen)
+            selected.append(self.allowed_models[0] if self.allowed_models else "accounts/fireworks/models/gemma-4-26b-a4b-it")
+
+        return selected
 
     def _find_model(self, tags: list[str]) -> str | None:
         for model in self.allowed_models:

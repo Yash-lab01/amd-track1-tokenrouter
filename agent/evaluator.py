@@ -126,14 +126,32 @@ def postprocess(domain: str, response: str) -> str:
 
 
 def validate_ner(response: str) -> tuple[bool, str]:
-    """Validate strict NER JSON schema. Normalize keys to lowercase before validation."""
+    """Validate strict NER JSON schema. Normalize keys to lowercase and coerce aliases before validation."""
     cleaned = postprocess("ner", response)
     try:
         data = json.loads(cleaned)
         # Normalize to lowercase keys
         data = {k.lower(): (v if isinstance(v, list) else [v]) for k, v in data.items()}
-        NEROutput(**data)
-        return True, json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        
+        aliases = {
+            "people": "person", "persons": "person", "per": "person",
+            "organizations": "org", "company": "org", "companies": "org",
+            "places": "location", "place": "location", "loc": "location",
+            "time": "date", "dates": "date",
+            "locations": "location",
+            "dates/times": "date"
+        }
+        
+        coerced_data = {}
+        for k, v in data.items():
+            new_k = aliases.get(k, k)
+            if new_k in coerced_data:
+                coerced_data[new_k].extend(v)
+            else:
+                coerced_data[new_k] = v
+
+        NEROutput(**coerced_data)
+        return True, json.dumps(coerced_data, ensure_ascii=False, separators=(",", ":"))
     except (json.JSONDecodeError, ValidationError, Exception):
         return False, response
 
@@ -171,6 +189,11 @@ def try_sentiment_rules(prompt: str) -> str | None:
         return "positive"
     if neg >= 2 and pos == 0:
         return "negative"
+    if re.search(r"\b(sentiment|positive|negative|neutral|polarity|tone)\b", text):
+        if pos == 1 and neg == 0 and neu == 0:
+            return "positive"
+        if neg == 1 and pos == 0 and neu == 0:
+            return "negative"
     if neu >= 1 and pos == 0 and neg == 0:
         return "neutral"
     if pos >= 1 and neg >= 1:

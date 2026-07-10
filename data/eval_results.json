@@ -3,17 +3,17 @@
   "accuracy": 1.0,
   "correct": 5,
   "total": 5,
-  "elapsed_s": 27.844620599993505,
+  "elapsed_s": 18.412323100026697,
   "domain_stats": {
     "math": {
       "correct": 1,
       "total": 1
     },
-    "debugging": {
+    "sentiment": {
       "correct": 1,
       "total": 1
     },
-    "sentiment": {
+    "debugging": {
       "correct": 1,
       "total": 1
     },
@@ -33,15 +33,14 @@
       "prompt": "What is 15% of 240?",
       "answer": "36",
       "expected": "36",
-      "correct": true
-    },
-    {
-      "task_id": "t4",
-      "domain": "debugging",
-      "prompt": "Fix this code: def add(a, b):\n    return a - b",
-      "answer": "def add(a, b):\n    return a + b",
-      "expected": "return a + b",
-      "correct": true
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.8334383134034333,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
     },
     {
       "task_id": "t3",
@@ -49,7 +48,29 @@
       "prompt": "Classify sentiment: 'The movie was absolutely fantastic!'",
       "answer": "positive",
       "expected": "positive",
-      "correct": true
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.6983712658933783,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "t4",
+      "domain": "debugging",
+      "prompt": "Fix this code: def add(a, b):\n    return a - b",
+      "answer": "def add(a, b):\n    return a + b",
+      "expected": "return a + b",
+      "correct": true,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.9199728671718627,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
     },
     {
       "task_id": "t1",
@@ -57,15 +78,29 @@
       "prompt": "What is the capital of Japan?",
       "answer": "Tokyo",
       "expected": "tokyo",
-      "correct": true
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.939151701236962,
+        "tier": "remote",
+        "reason": "remote-first",
+        "model": "accounts/fireworks/models/minimax-m3"
+      }
     },
     {
       "task_id": "t5",
       "domain": "ner",
       "prompt": "Extract entities from: 'Apple CEO Tim Cook visited London in March 2024'",
-      "answer": "{\"person\":[\"Tim Cook\"],\"org\":[],\"location\":[\"London\"],\"date\":[\"March 2024\"]}",
+      "answer": "{\"person\":[\"Tim Cook\"],\"org\":[\"Apple\"],\"location\":[\"London\"],\"date\":[\"March 2024\"]}",
       "expected": "",
-      "correct": true
+      "correct": true,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.6401512681083018,
+        "tier": "remote",
+        "reason": "remote-first",
+        "model": "accounts/fireworks/models/minimax-m3"
+      }
     }
   ]
 }

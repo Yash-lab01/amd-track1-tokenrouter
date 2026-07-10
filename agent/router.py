@@ -8,6 +8,7 @@ trusts local answers when a deterministic solver or strict validator can prove
 the output shape. Risky domains go remote first with short prompts.
 """
 import asyncio
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -15,6 +16,7 @@ from agent.classifier import DomainClassifier
 from agent.evaluator import postprocess, try_solve_locally, validate
 from agent.local_model import LocalModel
 from agent.remote_model import RemoteModel
+from agent.trap_detector import TrapDetector
 
 
 CLASSIFIER_CONF_THRESHOLD = 0.65
@@ -64,14 +66,15 @@ class HybridRouter:
         self.classifier = DomainClassifier()
         self.local = LocalModel()
         self.remote = RemoteModel(api_key, base_url, allowed_models)
+        self.traps = TrapDetector()
         self.mode = mode
 
         self._local_executor = ThreadPoolExecutor(max_workers=1)
         self._active_local_tasks = 0
-        self._answer_cache: dict[str, str] = {}
+        self._answer_cache: dict[str, tuple[str, dict]] = {}
 
-    async def route_async(self, prompt: str) -> str:
-        """Route one prompt and return only the answer string."""
+    async def route_async(self, prompt: str) -> tuple[str, dict]:
+        """Route one prompt and return (answer_string, metadata_dict)."""
         deadline = time.monotonic() + 28.0
         cache_key = f"{self.mode}:{prompt}"
         if cache_key in self._answer_cache:
@@ -79,23 +82,28 @@ class HybridRouter:
 
         domain, conf = self.classifier.classify(prompt)
 
+        is_semantic_trap = False
+        trap_reason, trap_score = "", 0.0
+        if os.environ.get("ENABLE_TFIDF_TRAP_DETECTOR", "1") == "1":
+            is_semantic_trap, trap_reason, trap_score = self.traps.is_trap(prompt)
+
         # SPATIAL PUZZLE & HALLUCINATION INTERCEPT:
-        # If detected, force the domain to 'logic' (which is REMOTE_FIRST) to bypass local completely.
-        if _is_spatial_puzzle(prompt) or _is_hallucination_trap(prompt):
+        # If detected, force the domain to 'logic' (REMOTE_FIRST) to bypass local.
+        if _is_spatial_puzzle(prompt) or _is_hallucination_trap(prompt) or is_semantic_trap:
             domain = "logic"
             conf = 1.0
-
+            metadata = self._trace(domain, conf, "router", f"trap-detected-{trap_reason}-{trap_score:.2f}", model="trap-detector")
 
         if self.mode == "remote":
-            answer = await self._remote_or_local_fallback(prompt, domain, conf, None, "remote-only", deadline)
-            self._answer_cache[cache_key] = answer
-            return answer
+            answer, metadata = await self._remote_or_local_fallback(prompt, domain, conf, None, "remote-only", deadline)
+            self._answer_cache[cache_key] = (answer, metadata)
+            return answer, metadata
 
         direct = try_solve_locally(domain, prompt)
         if direct is not None:
-            self._trace(domain, conf, "direct", "deterministic", model="local")
-            self._answer_cache[cache_key] = direct
-            return direct
+            metadata = self._trace(domain, conf, "direct", "deterministic", model="local")
+            self._answer_cache[cache_key] = (direct, metadata)
+            return direct, metadata
 
         local_answer = None
         if self.mode == "local" or self._should_try_local_first(domain, conf):
@@ -122,25 +130,27 @@ class HybridRouter:
 
                 if local_answer is not None:
                     is_valid, cleaned = validate(domain, prompt, local_answer)
+                else:
+                    is_valid, cleaned = False, "Unable to determine"
                 if is_valid:
-                    self._trace(domain, conf, "local", "validator-pass", model="local")
-                    self._answer_cache[cache_key] = cleaned
-                    return cleaned
+                    metadata = self._trace(domain, conf, "local", "validator-pass", model="local")
+                    self._answer_cache[cache_key] = (cleaned, metadata)
+                    return cleaned, metadata
                 if self.mode == "local":
-                    cleaned = postprocess(domain, local_answer)
-                    self._trace(domain, conf, "local", "validator-fail-local-only", model="local")
-                    self._answer_cache[cache_key] = cleaned
-                    return cleaned
+                    cleaned = postprocess(domain, local_answer or "Unable to determine")
+                    metadata = self._trace(domain, conf, "local", "validator-fail-local-only", model="local")
+                    self._answer_cache[cache_key] = (cleaned, metadata)
+                    return cleaned, metadata
             except asyncio.TimeoutError:
                 # Local model was too slow — skip it and go remote
                 local_answer = None
                 if self.mode == "local":
                     # local-only mode with no remote: return empty rather than hang
-                    self._trace(domain, conf, "local", "timeout-local-only", model="local")
-                    self._answer_cache[cache_key] = ""
-                    return ""
+                    metadata = self._trace(domain, conf, "local", "timeout-local-only", model="local")
+                    self._answer_cache[cache_key] = ("Unable to determine", metadata)
+                    return "Unable to determine", metadata
 
-        answer = await self._remote_or_local_fallback(
+        answer, metadata = await self._remote_or_local_fallback(
             prompt,
             domain,
             conf,
@@ -148,8 +158,8 @@ class HybridRouter:
             "remote-first" if local_answer is None else "local-validator-fail",
             deadline
         )
-        self._answer_cache[cache_key] = answer
-        return answer
+        self._answer_cache[cache_key] = (answer, metadata)
+        return answer, metadata
 
     def _should_try_local_first(self, domain: str, conf: float) -> bool:
         if domain in LOCAL_TRUST_DOMAINS:
@@ -206,34 +216,47 @@ class HybridRouter:
         local_answer: str | None,
         reason: str,
         deadline: float = 0.0,
-    ) -> str:
+    ) -> tuple[str, dict]:
         # Phase 8: The Logprob Gate
         # We no longer use the Lean Auditor to double check local answers.
         # If we have a local_answer here, it means it failed local validation (`is_valid` was false).
         # We should NOT return it automatically, we must fall back to remote.
         
         try:
-            # We don't audit anymore, we just generate remote
             answer, model = await self.remote.generate(prompt, domain, conf=conf)
-
             is_valid, cleaned = validate(domain, prompt, answer)
 
-            if not is_valid and domain in RETRY_DOMAINS:
+            should_retry = (not answer.strip()) or (not is_valid and domain in RETRY_DOMAINS)
+            if should_retry:
                 retry_answer, retry_model = await self.remote.generate_correction(
                     prompt, domain, cleaned, conf=conf
                 )
                 retry_valid, retry_cleaned = validate(domain, prompt, retry_answer)
                 if retry_valid:
-                    self._trace(domain, conf, "remote", f"{reason}-retry", model=retry_model)
-                    return retry_cleaned
-                cleaned = postprocess(domain, retry_answer)
-                model = retry_model
-
-            if not is_valid:
+                    metadata = self._trace(domain, conf, "remote", f"{reason}-retry", model=retry_model)
+                    return retry_cleaned, metadata
+                retry_cleaned = postprocess(domain, retry_answer)
+                if retry_cleaned.strip():
+                    cleaned = retry_cleaned
+                    model = retry_model
+                elif not is_valid:
+                    cleaned = postprocess(domain, answer)
+            elif not is_valid:
                 cleaned = postprocess(domain, answer)
 
-            self._trace(domain, conf, "remote", reason, model=model)
-            return cleaned
+            if not cleaned.strip():
+                if local_answer is not None and local_answer.strip():
+                    cleaned = postprocess(domain, local_answer)
+                else:
+                    try:
+                        local_ans = await self._generate_local(prompt, domain, deadline=deadline)
+                        cleaned = postprocess(domain, local_ans)
+                    except Exception as local_exc:
+                        print(f"[WARNING] Empty remote and local fallback failed: {local_exc}", flush=True)
+                        cleaned = "Unable to determine"
+
+            metadata = self._trace(domain, conf, "remote", reason, model=model)
+            return cleaned, metadata
         except Exception as exc:
             print(f"[WARNING] Remote call failed: {exc}. Falling back to local.", flush=True)
             if local_answer is not None:
@@ -247,9 +270,9 @@ class HybridRouter:
                     fallback = cleaned_local if is_val else postprocess(domain, local_ans)
                 except Exception as local_exc:
                     print(f"[WARNING] Local fallback also failed/timed out: {local_exc}", flush=True)
-                    fallback = ""
-            self._trace(domain, conf, "local", "remote-failed", model="local")
-            return fallback
+                    fallback = "Unable to determine"
+            metadata = self._trace(domain, conf, "local", "remote-failed", model="local")
+            return fallback, metadata
 
     def _trace(
         self,
@@ -258,9 +281,16 @@ class HybridRouter:
         tier: str,
         reason: str,
         model: str = "",
-    ) -> None:
+    ) -> dict:
         model_part = f" model={model}" if model else ""
         print(
             f"[route] domain={domain} conf={conf:.3f} tier={tier} reason={reason}{model_part}",
             flush=True,
         )
+        return {
+            "domain": domain,
+            "conf": conf,
+            "tier": tier,
+            "reason": reason,
+            "model": model,
+        }

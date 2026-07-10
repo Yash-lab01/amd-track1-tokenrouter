@@ -4,10 +4,14 @@ local_model.py
 Thread-safe wrapper around llama-cpp-python for CPU inference.
 Uses a lock so concurrent async tasks don't cause CPU thrashing.
 """
-import math
 import os
 import threading
-from llama_cpp import Llama, LlamaGrammar
+from llama_cpp import Llama
+
+try:
+    from llama_cpp import LlamaGrammar
+except Exception:  # Depends on llama-cpp-python build/version.
+    LlamaGrammar = None
 
 NER_GRAMMAR_STRING = r'''
 root ::= ws "{" ws "\"person\"" ws ":" ws stringlist "," ws "\"org\"" ws ":" ws stringlist "," ws "\"location\"" ws ":" ws stringlist "," ws "\"date\"" ws ":" ws stringlist "}"
@@ -90,6 +94,12 @@ class LocalModel:
             )
 
         if not os.path.exists(model_path):
+            fallback_path = "./models/gemma-2b-instruct-q4.gguf"
+            if os.path.exists(fallback_path):
+                print(f"[LocalModel] Preferred model missing, using fallback: {fallback_path}")
+                model_path = fallback_path
+
+        if not os.path.exists(model_path):
             raise FileNotFoundError(
                 f"Local model not found at: {model_path}\n"
                 f"Download from HuggingFace and place in ./models/"
@@ -107,11 +117,7 @@ class LocalModel:
         )
         self._lock = threading.Lock()
         
-        # Initialize strict grammars
-        self.grammars = {
-            "ner": LlamaGrammar.from_string(NER_GRAMMAR_STRING),
-            "sentiment": LlamaGrammar.from_string(SENTIMENT_GRAMMAR_STRING),
-        }
+        self.grammars = self._load_grammars()
         
         print("[LocalModel] Model loaded.")
 
@@ -149,3 +155,19 @@ class LocalModel:
     def count_tokens(self, text: str) -> int:
         """Count tokens locally — used to prune remote prompts."""
         return len(self.llm.tokenize(text.encode("utf-8", errors="replace")))
+
+    def _load_grammars(self) -> dict[str, object]:
+        if LlamaGrammar is None:
+            print("[LocalModel] LlamaGrammar unavailable; strict local grammars disabled.", flush=True)
+            return {}
+
+        grammars = {}
+        for domain, grammar_text in {
+            "ner": NER_GRAMMAR_STRING,
+            "sentiment": SENTIMENT_GRAMMAR_STRING,
+        }.items():
+            try:
+                grammars[domain] = LlamaGrammar.from_string(grammar_text)
+            except Exception as exc:
+                print(f"[LocalModel] Failed to load {domain} grammar: {exc}", flush=True)
+        return grammars
