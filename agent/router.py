@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from agent.classifier import DomainClassifier
 from agent.evaluator import postprocess, try_solve_locally, validate
-from agent.local_model import LocalModel, LowConfidenceError
+from agent.local_model import LocalModel
 from agent.remote_model import RemoteModel
 
 
@@ -139,10 +139,6 @@ class HybridRouter:
                     self._trace(domain, conf, "local", "timeout-local-only", model="local")
                     self._answer_cache[cache_key] = ""
                     return ""
-            except LowConfidenceError as e:
-                # Local model rejected its own answer due to low mathematical confidence.
-                print(f"[WARNING] Local model low confidence: {e}. Falling back to remote.", flush=True)
-                local_answer = None
 
         answer = await self._remote_or_local_fallback(
             prompt,

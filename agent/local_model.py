@@ -9,9 +9,6 @@ import os
 import threading
 from llama_cpp import Llama, LlamaGrammar
 
-class LowConfidenceError(Exception):
-    pass
-
 NER_GRAMMAR_STRING = r'''
 root ::= ws "{" ws "\"person\"" ws ":" ws stringlist "," ws "\"org\"" ws ":" ws stringlist "," ws "\"location\"" ws ":" ws stringlist "," ws "\"date\"" ws ":" ws stringlist "}"
 stringlist ::= "[" ws "]" | "[" ws string ("," ws string)* "]" ws
@@ -107,7 +104,6 @@ class LocalModel:
             use_mmap=True,           # Use memory-mapping to let OS page weights in/out dynamically
             use_mlock=False,         # Do not lock memory (keeps physical RAM usage minimal)
             verbose=False,
-            logits_all=True,         # REQUIRED to fetch logprobs during generate()
         )
         self._lock = threading.Lock()
         
@@ -133,36 +129,22 @@ class LocalModel:
         grammar = self.grammars.get(domain)
 
         with self._lock:
-            output = self.llm(
-                full_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=0.9,
-                echo=False,
-                grammar=grammar,
-                stop=["<end_of_turn>", "<start_of_turn>"],
-                logprobs=1,
-            )
-
-        choice = output["choices"][0]
-        text = choice["text"].strip()
-        
-        # Calculate logprob confidence if requested and available
-        if min_confidence > 0 and "logprobs" in choice and choice["logprobs"] is not None:
-            token_logprobs = choice["logprobs"].get("token_logprobs", [])
-            # Filter out None values which can occur for special tokens
-            valid_logprobs = [lp for lp in token_logprobs if lp is not None]
-            
-            if valid_logprobs:
-                avg_logprob = sum(valid_logprobs) / len(valid_logprobs)
-                confidence = math.exp(avg_logprob)
-                print(f"[LocalModel] domain={domain} average_confidence={confidence:.3f}")
-                if confidence < min_confidence:
-                    raise LowConfidenceError(f"Confidence {confidence:.3f} is below threshold {min_confidence}")
-            else:
-                print(f"[LocalModel] domain={domain} warning: no valid logprobs returned")
-
-        return text
+            try:
+                output = self.llm(
+                    full_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=0.9,
+                    echo=False,
+                    grammar=grammar,
+                    stop=["<end_of_turn>", "<start_of_turn>"],
+                )
+                choice = output["choices"][0]
+                text = choice["text"].strip()
+                return text
+            except Exception as e:
+                print(f"[LocalModel] Generation failed: {e}", flush=True)
+                return ""
 
     def count_tokens(self, text: str) -> int:
         """Count tokens locally — used to prune remote prompts."""

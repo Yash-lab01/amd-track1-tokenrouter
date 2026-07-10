@@ -82,9 +82,10 @@ async def main():
     router = HybridRouter(api_key=api_key, base_url=base_url, allowed_models=allowed_models)
 
     # Semaphore: limits simultaneous remote API calls.
-    # Fireworks handles parallel requests well. 20 concurrent keeps the batch fast
-    # without overwhelming the API rate limit.
-    semaphore = asyncio.Semaphore(20)
+    # The leaderboard environment is strictly rate-limited and has 2 vCPUs. 
+    # 5 concurrent tasks keeps the pipeline moving without hitting HTTP 429 Too Many Requests
+    # or instantly filling up the local model queue.
+    semaphore = asyncio.Semaphore(5)
     t_start   = time.monotonic()
 
     futures = [process_task(t, router, semaphore) for t in tasks]
