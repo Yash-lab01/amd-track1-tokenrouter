@@ -57,6 +57,7 @@ class HybridRouter:
         self.mode = mode
 
         self._local_executor = ThreadPoolExecutor(max_workers=1)
+        self._active_local_tasks = 0
         self._answer_cache: dict[str, str] = {}
 
     async def route_async(self, prompt: str) -> str:
@@ -153,6 +154,12 @@ class HybridRouter:
     _LOCAL_TIMEOUT_S = 12
 
     async def _generate_local(self, prompt: str, domain: str, temperature: float = 0.1) -> str:
+        # Load Shedding: If the local thread pool is busy, instantly bypass it to avoid hanging the container
+        if self._active_local_tasks >= 2:
+            print(f"[WARNING] Local model queue full ({self._active_local_tasks}), fast-falling back to remote for {domain}.", flush=True)
+            raise asyncio.TimeoutError("Local queue full")
+            
+        self._active_local_tasks += 1
         loop = asyncio.get_event_loop()
         try:
             return await asyncio.wait_for(
@@ -167,11 +174,13 @@ class HybridRouter:
             )
         except asyncio.TimeoutError:
             print(
-                f"[WARNING] Local model timed out after {self._LOCAL_TIMEOUT_S}s "
+                f"[WARNING] Local model timed out (or queue full) after {self._LOCAL_TIMEOUT_S}s "
                 f"for domain={domain}. Falling back to remote.",
                 flush=True,
             )
             raise  # caller (_remote_or_local_fallback) will catch and use remote
+        finally:
+            self._active_local_tasks -= 1
 
     async def _remote_or_local_fallback(
         self,
