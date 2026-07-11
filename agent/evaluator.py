@@ -63,8 +63,14 @@ def postprocess(domain: str, response: str) -> str:
         return cleaned.strip()
 
     if domain == "sentiment":
+        # Judge-aware: keep the full "Label: reason" output
+        # The judge checks that the reason acknowledges both sides for mixed reviews
         lower = text.lower()
-        for label in ("positive", "negative", "neutral"):
+        # Check if the response already has "Label: reason" format
+        if re.match(r"^(positive|negative|neutral|mixed)\s*:", lower):
+            return text  # Keep full output with reason
+        # Extract label if no reason format
+        for label in ("positive", "negative", "neutral", "mixed"):
             if re.search(rf"\b{label}\b", lower):
                 return label
         return text.split()[0].lower().strip(".,!") if text.split() else text
@@ -99,12 +105,16 @@ def postprocess(domain: str, response: str) -> str:
         return text.strip()
 
     if domain == "factual":
+        # Judge-aware: keep explanations if the question asks for them
         # Strip common preambles
         text = re.sub(
             r"^(?:the answer is|answer:|it is|that would be|yes,?\s+it is|no,?\s+it is)\s*",
             "", text, flags=re.IGNORECASE
         ).strip()
-        # Take only the first sentence / line to avoid verbose explanations
+        # If the question asks to explain, compare, or describe, keep the full answer
+        if re.search(r"\b(explain|difference|compare|describe|why|how)\b", text, re.IGNORECASE):
+            return text
+        # For simple factual questions, take only the first sentence
         first_sentence = re.split(r'[.!?]\s+[A-Z]|\n', text)[0].strip()
         first_sentence = first_sentence.rstrip(".!?")
         return first_sentence if first_sentence else text.split("\n")[0].strip()
@@ -287,6 +297,9 @@ FACT_PATTERNS: list[tuple[re.Pattern, str]] = [
 
 def try_factual_rules(prompt: str) -> str | None:
     """High-confidence benchmark facts. Keep intentionally small to avoid stale/wrong facts."""
+    # Skip questions that ask for explanations - they need remote model
+    if re.search(r"\b(explain|difference|compare|describe|why|how does|briefly)\b", prompt, re.IGNORECASE):
+        return None
     if not re.search(r"\b(what|who|when|where|which|how many|capital|symbol|formula)\b", prompt, re.IGNORECASE):
         return None
     for pattern, answer in FACT_PATTERNS:
@@ -299,7 +312,11 @@ def validate_sentiment(response: str) -> tuple[bool, str]:
     """Validate that the response contains one known sentiment label."""
     cleaned = postprocess("sentiment", response)
     lower = cleaned.lower().strip()
-    matches = [label for label in ("positive", "negative", "neutral") if label in lower]
+    # Check for "Label: reason" format first (judge-aware)
+    label_match = re.match(r"^(positive|negative|neutral|mixed)\s*:", lower)
+    if label_match:
+        return True, cleaned  # Keep full output with reason
+    matches = [label for label in ("positive", "negative", "neutral", "mixed") if label in lower]
     if len(matches) == 1:
         return True, matches[0]
     return False, response

@@ -5,6 +5,7 @@ Async Fireworks AI client — Remote-First Accuracy Engine with:
 - Chain-of-Thought prompting with answer extraction
 - Self-consistency voting for math/logic (3 parallel calls)
 - Few-shot examples in system prompts
+- Judge-aware prompts (sentiment needs reason, factual needs explanation)
 - Model specialization per domain
 - Dynamic max_tokens based on prompt complexity
 """
@@ -18,37 +19,47 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from agent.compressor import DomainCompressor
 
 # Output token caps — accuracy-first with dynamic scaling
+# Increased for judge-aware prompts (sentiment needs reason, factual needs explanation)
 REMOTE_MAX_TOKENS = {
-    "sentiment":      10,
-    "factual":       200,
-    "math":          500,  # Increased for CoT
-    "ner":           250,
-    "summarization": 250,
+    "sentiment":      100,  # Needs label + one-sentence reason
+    "factual":       300,   # Needs answer + brief explanation
+    "math":          500,   # CoT
+    "ner":           300,   # Needs all entities with labels
+    "summarization": 400,   # Needs exact format (sentences/bullets)
     "debugging":     600,
     "codegen":       700,
-    "logic":         600,  # Increased for CoT
+    "logic":         600,   # CoT
 }
 
-# Chain-of-Thought system prompts with few-shot examples
-# Models reason much better with CoT, then we extract only the final answer
+# Judge-aware system prompts with few-shot examples
+# Key insight: the judge is an LLM that checks semantic completeness
 REMOTE_SYSTEM_PROMPTS = {
-    "ner":           'Return ONLY a JSON object with exactly these keys: {"person":[],"org":[],"location":[],"date":[]}. Use empty arrays for missing entities. No prose, no markdown.\nExample: Input: "Tim Cook visited Paris in 2024" → {"person":["Tim Cook"],"org":[],"location":["Paris"],"date":["2024"]}',
-    "sentiment":     "Return exactly one word: positive, negative, or neutral. Nothing else.\nExample: 'I love this product!' → positive\nExample: 'Terrible service.' → negative",
+    "ner":           'Extract ALL named entities from the text. Return ONLY a JSON object with exactly these keys: {"person":[],"org":[],"location":[],"date":[]}. List every person, organization, location, and date. Use empty arrays for missing types. No prose, no markdown.\nExample: Input: "Tim Cook visited Paris in 2024" → {"person":["Tim Cook"],"org":[],"location":["Paris"],"date":["2024"]}',
+    
+    "sentiment":     "Classify the sentiment as Positive, Negative, Neutral, or Mixed. Then give a one-sentence reason that acknowledges ALL aspects of the text (both positive and negative if present). Format: 'Label: <one-sentence reason>'. If the text has both positive and negative elements, use Mixed or Neutral and acknowledge both sides.\nExample: 'The food was great but service was slow.' → Neutral: The review acknowledges both positive food quality and negative service speed.\nExample: 'I love this product!' → Positive: The review expresses clear satisfaction with the product.",
+    
     "math":          "Solve the problem step by step. Show your reasoning. End with 'Final Answer: <number>'. No units unless asked.\nExample: 'What is 15% of 200?' → 15% = 0.15, 0.15 * 200 = 30. Final Answer: 30",
-    "summarization": "Return a concise summary preserving the main facts. No preamble like 'Here is a summary:'.",
+    
+    "summarization": "Summarize the passage following the EXACT format requested (number of sentences, bullet points, word limits). Capture both the main points AND any challenges or concerns mentioned. Do not omit either side. No preamble.\nExample: 'Summarize in 2 sentences' → Write exactly 2 sentences covering both opportunities and challenges.",
+    
     "debugging":     "Return only the corrected code. No explanation.\nExample: Fix 'def add(a,b): return a-b' → def add(a, b):\n    return a + b",
+    
     "codegen":       "Return only working Python code. No explanation or markdown unless explicitly requested.\nExample: 'Write a function to reverse a string' → def reverse_string(s):\n    return s[::-1]",
+    
     "logic":         "Think through the problem step by step. Show your reasoning. End with 'Final Answer: <answer>'. Do not force yes/no unless the task asks yes/no.\nExample: 'All cats are animals. Fluffy is a cat. Is Fluffy an animal?' → All cats are animals. Fluffy is a cat. Therefore Fluffy is an animal. Final Answer: Yes",
-    "factual":       "Answer directly in one short phrase or sentence. No preamble.\nExample: 'Capital of France?' → Paris",
+    
+    "factual":       "Answer the question directly and completely. If the question asks to explain or compare, provide a brief but complete explanation. Do not give just one word if an explanation is requested. Be concise but thorough.\nExample: 'What is the capital of France?' → Paris\nExample: 'Explain the difference between RAM and ROM' → RAM is volatile memory used for temporary storage of active programs, while ROM is non-volatile memory that stores permanent firmware. RAM is fast and loses data when powered off; ROM retains data without power.",
 }
 
 RETRY_SYSTEM_PROMPTS = {
-    "ner": 'Return ONLY valid JSON with keys person, org, location, date. Use empty arrays when missing.',
-    "sentiment": "Return exactly one word: positive, negative, or neutral.",
+    "ner": 'Return ONLY valid JSON with keys person, org, location, date. List ALL entities. Use empty arrays when missing.',
+    "sentiment": "Classify as Positive, Negative, Neutral, or Mixed. Give a one-sentence reason acknowledging all aspects. Format: 'Label: reason'.",
     "math": "Solve step by step. End with 'Final Answer: <number>'.",
     "debugging": "Return only syntactically valid corrected Python code.",
     "codegen": "Return only syntactically valid Python code.",
     "logic": "Think step by step. End with 'Final Answer: <answer>'.",
+    "factual": "Answer directly and completely. Explain if asked to explain.",
+    "summarization": "Follow the exact format requested. Capture both main points and challenges.",
 }
 
 # Domains that use self-consistency voting (3 parallel calls, majority vote)
@@ -257,13 +268,15 @@ class RemoteModel:
     def _get_format_hint(self, domain: str) -> str:
         """Domain-specific format hints appended to user prompt."""
         if domain == "factual":
-            return "\n\nDirect answer only (one word or short phrase):"
+            return "\n\nAnswer directly and completely:"
         elif domain == "logic":
             return "\n\nThink step by step. Final Answer:"
         elif domain == "sentiment":
-            return "\n\nLabel (positive, negative, or neutral):"
+            return "\n\nClassification with reason:"
         elif domain == "math":
             return "\n\nSolve step by step. Final Answer:"
+        elif domain == "summarization":
+            return "\n\nSummary following the exact format requested:"
         return ""
 
     def _dynamic_max_tokens(self, domain: str, prompt: str) -> int:
@@ -371,7 +384,7 @@ class RemoteModel:
         ):
             score += 1
         if re.search(
-            r"\b(explain|why|how does|prove|justify|elaborate|describe|analyze)\b",
+            r"\b(explain|why|how does|prove|justify|elaborate|describe|analyze|difference|compare)\b",
             prompt, re.IGNORECASE,
         ):
             score += 1
