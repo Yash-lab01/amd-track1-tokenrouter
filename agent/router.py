@@ -9,6 +9,7 @@ the output shape. Risky domains go remote first with short prompts.
 """
 import asyncio
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -54,6 +55,11 @@ def _is_hallucination_trap(prompt: str) -> bool:
     return any(keyword in lowered for keyword in _HALLUCINATION_TRAP_KEYWORDS)
 
 
+def _normalize_cache_prompt(prompt: str) -> str:
+    """Cache duplicate prompts without changing the prompt sent to models."""
+    return re.sub(r"\s+", " ", prompt.strip())
+
+
 
 class HybridRouter:
     def __init__(
@@ -76,7 +82,7 @@ class HybridRouter:
     async def route_async(self, prompt: str) -> tuple[str, dict]:
         """Route one prompt and return (answer_string, metadata_dict)."""
         deadline = time.monotonic() + 28.0
-        cache_key = f"{self.mode}:{prompt}"
+        cache_key = f"{self.mode}:{_normalize_cache_prompt(prompt)}"
         if cache_key in self._answer_cache:
             return self._answer_cache[cache_key]
 
