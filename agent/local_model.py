@@ -3,6 +3,12 @@ local_model.py
 --------------
 Thread-safe wrapper around llama-cpp-python for CPU inference.
 Uses a lock so concurrent async tasks don't cause CPU thrashing.
+
+Used in hybrid mode for:
+- NER: Generate JSON → validate schema → 0 remote tokens if valid
+- Code: Generate code → AST check → 0 remote tokens if valid
+- Sentiment: Generate label → validate → 0 remote tokens if valid
+- Emergency fallback if remote fails
 """
 import os
 import threading
@@ -27,20 +33,21 @@ ws ::= [ \t\n]*
 
 # Domain-specific max_tokens for local generation (free, so be generous)
 LOCAL_MAX_TOKENS = {
-    "sentiment":     32,
-    "factual":       80,
-    "math":         100,
-    "ner":          256,
-    "summarization":256,
-    "debugging":    384,
-    "codegen":      512,
-    "logic":        200,
+    "sentiment":      32,
+    "factual":       100,
+    "math":          150,
+    "ner":           300,   # Increased for better entity extraction
+    "summarization": 300,
+    "debugging":     450,   # Increased for code fixes
+    "codegen":       600,   # Increased for code generation
+    "logic":         250,
 }
 
-# Long, detailed system prompts per domain (free tokens — go all out)
+# Judge-aware system prompts — local tokens are FREE, so go all out
 SYSTEM_PROMPTS = {
     "ner": (
         "You are a named entity recognition expert. "
+        "Extract ALL named entities from the text. "
         "Always output a JSON object with exactly four keys: "
         '"person" (list of person names), "org" (list of organization names), '
         '"location" (list of place names), "date" (list of date/time expressions). '
@@ -65,13 +72,14 @@ SYSTEM_PROMPTS = {
     ),
     "debugging": (
         "You are an expert Python debugger. "
-        "Identify the bug, then output ONLY the corrected code inside a ```python block. "
-        "No explanation needed unless the fix is non-obvious."
+        "Identify the bug, then output ONLY the corrected code. "
+        "No explanation needed. Output just the fixed code."
     ),
     "codegen": (
         "You are an expert Python programmer. "
-        "Write clean, working Python code inside a ```python block. "
-        "Include a docstring. Do not include example usage unless asked."
+        "Write clean, working Python code. "
+        "Include a docstring. Do not include example usage unless asked. "
+        "Output only the code, no markdown fences."
     ),
     "logic": (
         "You are a logical reasoning expert. "
@@ -108,7 +116,7 @@ class LocalModel:
         print(f"[LocalModel] Loading model: {model_path}")
         self.llm = Llama(
             model_path=model_path,
-            n_ctx=1280,              # Reduced from 2048 to save KV cache RAM (plenty for hackathon tasks)
+            n_ctx=2048,              # Increased from 1280 for better NER/code context
             n_threads=min(4, os.cpu_count() or 4),
             n_batch=256,             # Reduced from 512 to lower peak memory during prompt processing
             use_mmap=True,           # Use memory-mapping to let OS page weights in/out dynamically
@@ -125,7 +133,7 @@ class LocalModel:
         """
         Thread-safe local generation.
         Uses domain-specific system prompt and token caps.
-        Calculates average logprob confidence; if below min_confidence, raises LowConfidenceError.
+        GBNF grammars force valid JSON for NER and exact labels for sentiment.
         """
         system = SYSTEM_PROMPTS.get(domain, SYSTEM_PROMPTS["factual"])
         max_tokens = LOCAL_MAX_TOKENS.get(domain, 128)
