@@ -1,34 +1,136 @@
 {
-  "mode": "local",
-  "accuracy": 0.8,
-  "correct": 4,
-  "total": 5,
-  "elapsed_s": 12.152707199998986,
+  "mode": "hybrid",
+  "accuracy": 0.43243243243243246,
+  "correct": 32,
+  "total": 74,
+  "elapsed_s": 171.6534956999967,
   "domain_stats": {
+    "factual": {
+      "correct": 6,
+      "total": 10
+    },
     "math": {
-      "correct": 1,
-      "total": 1
+      "correct": 11,
+      "total": 18
     },
     "sentiment": {
-      "correct": 1,
-      "total": 1
-    },
-    "debugging": {
-      "correct": 1,
-      "total": 1
-    },
-    "factual": {
-      "correct": 1,
-      "total": 1
+      "correct": 10,
+      "total": 10
     },
     "ner": {
       "correct": 0,
-      "total": 1
+      "total": 8
+    },
+    "debugging": {
+      "correct": 2,
+      "total": 7
+    },
+    "codegen": {
+      "correct": 0,
+      "total": 5
+    },
+    "logic": {
+      "correct": 0,
+      "total": 13
+    },
+    "summarization": {
+      "correct": 3,
+      "total": 3
     }
   },
   "results": [
     {
-      "task_id": "t2",
+      "task_id": "f1",
+      "domain": "factual",
+      "prompt": "What is the capital of France?",
+      "answer": "Paris",
+      "expected": "Paris",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.9433685420926201,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f2",
+      "domain": "factual",
+      "prompt": "Who wrote Romeo and Juliet?",
+      "answer": "William Shakespeare",
+      "expected": "Shakespeare",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.6431114073181713,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f3",
+      "domain": "factual",
+      "prompt": "What is the boiling point of water in Celsius?",
+      "answer": "100",
+      "expected": "100",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.8301119829658336,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f4",
+      "domain": "factual",
+      "prompt": "How many planets are in our solar system?",
+      "answer": "8",
+      "expected": "8",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.7402910120064206,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f5",
+      "domain": "factual",
+      "prompt": "What is the chemical symbol for gold?",
+      "answer": "Au",
+      "expected": "Au",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.8366643234720176,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f6",
+      "domain": "factual",
+      "prompt": "In what year did World War II end?",
+      "answer": "1945",
+      "expected": "1945",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.8425013686386871,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m1",
       "domain": "math",
       "prompt": "What is 15% of 240?",
       "answer": "36",
@@ -36,69 +138,1014 @@
       "correct": true,
       "metadata": {
         "domain": "math",
-        "conf": 0.8334383134034333,
+        "conf": 0.8296128421736282,
         "tier": "direct",
         "reason": "deterministic",
         "model": "local"
       }
     },
     {
-      "task_id": "t3",
+      "task_id": "m2",
+      "domain": "math",
+      "prompt": "Calculate 7 * 8 + 12",
+      "answer": "68",
+      "expected": "68",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.6549951490333795,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m3",
+      "domain": "math",
+      "prompt": "Solve for x: 2x + 6 = 18",
+      "answer": "6",
+      "expected": "6",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7650194970203179,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m4",
+      "domain": "math",
+      "prompt": "What is the factorial of 5?",
+      "answer": "120",
+      "expected": "120",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.5577121290948474,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m5",
+      "domain": "math",
+      "prompt": "What is the area of a rectangle with length 8 and width 5?",
+      "answer": "Unable to determine",
+      "expected": "40",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7505763507867874,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f10",
+      "domain": "factual",
+      "prompt": "What element has atomic number 1?",
+      "answer": "Unable to determine",
+      "expected": "hydrogen",
+      "correct": false,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.3985386809466043,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f8",
+      "domain": "factual",
+      "prompt": "Who invented the telephone?",
+      "answer": "Unable to determine",
+      "expected": "Bell",
+      "correct": false,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.8085261541132995,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m6",
+      "domain": "math",
+      "prompt": "A train travels 150 km in 3 hours. What is its average speed?",
+      "answer": "50",
+      "expected": "50",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7537681131714488,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m7",
+      "domain": "math",
+      "prompt": "What is the GCD of 48 and 18?",
+      "answer": "6",
+      "expected": "6",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.724510111397163,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m8",
+      "domain": "math",
+      "prompt": "Find the mean of: 4, 8, 15, 16, 23",
+      "answer": "13.2",
+      "expected": "13.2",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7810004265081396,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m9",
+      "domain": "math",
+      "prompt": "What is 25% of 200?",
+      "answer": "50",
+      "expected": "50",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.6548319833671818,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m10",
+      "domain": "math",
+      "prompt": "Evaluate: (3 + 5) * 4 - 6",
+      "answer": "26",
+      "expected": "26",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.41088302596484827,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m11",
+      "domain": "math",
+      "prompt": "What is the area of a circle with radius 7? Use pi = 3.14159",
+      "answer": "153.93804",
+      "expected": "153.938",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7579043805962982,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m12",
+      "domain": "math",
+      "prompt": "Solve: x^2 - 5x + 6 = 0",
+      "answer": "2, 3",
+      "expected": "2, 3",
+      "correct": true,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.804958960919499,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s1",
       "domain": "sentiment",
-      "prompt": "Classify sentiment: 'The movie was absolutely fantastic!'",
+      "prompt": "Classify the sentiment: 'This product is absolutely amazing, I love it!'",
       "answer": "positive",
       "expected": "positive",
       "correct": true,
       "metadata": {
         "domain": "sentiment",
-        "conf": 0.6983712658933783,
+        "conf": 0.8343188639459477,
         "tier": "direct",
         "reason": "deterministic",
         "model": "local"
       }
     },
     {
-      "task_id": "t4",
-      "domain": "debugging",
-      "prompt": "Fix this code: def add(a, b):\n    return a - b",
-      "answer": "def add(a, b):\n    return a + b",
-      "expected": "return a + b",
+      "task_id": "s2",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment: 'Terrible experience, never buying again.'",
+      "answer": "negative",
+      "expected": "negative",
       "correct": true,
       "metadata": {
-        "domain": "debugging",
-        "conf": 0.9199728671718627,
+        "domain": "sentiment",
+        "conf": 0.6210715285574716,
         "tier": "direct",
         "reason": "deterministic",
         "model": "local"
       }
     },
     {
-      "task_id": "t1",
-      "domain": "factual",
-      "prompt": "What is the capital of Japan?",
-      "answer": "Tokyo",
-      "expected": "tokyo",
+      "task_id": "s3",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment: 'It's okay, nothing special, pretty average.'",
+      "answer": "neutral",
+      "expected": "neutral",
       "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.6567610367266368,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s4",
+      "domain": "sentiment",
+      "prompt": "What is the sentiment of this review: 'The food was great but the service was slow.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.8070513057911737,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s5",
+      "domain": "sentiment",
+      "prompt": "Sentiment: 'I absolutely hate how slow this is, worst software ever.'",
+      "answer": "negative",
+      "expected": "negative",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.687776900992157,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s6",
+      "domain": "sentiment",
+      "prompt": "Determine the sentiment: 'The movie was fantastic and I highly recommend it!'",
+      "answer": "positive",
+      "expected": "positive",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.7175144547881507,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s7",
+      "domain": "sentiment",
+      "prompt": "Classify: 'Delivery was on time. Product looks fine.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.2927073859671773,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s8",
+      "domain": "sentiment",
+      "prompt": "Is this positive, negative, or neutral: 'I love this product! It exceeded all my expectations.'",
+      "answer": "positive",
+      "expected": "positive",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.9642122439812879,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s9",
+      "domain": "sentiment",
+      "prompt": "Sentiment analysis: 'The support team was rude and unhelpful. Completely disappointed.'",
+      "answer": "negative",
+      "expected": "negative",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.6328483281818575,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "s10",
+      "domain": "sentiment",
+      "prompt": "Classify the sentiment of: 'Fine. Gets the job done I guess.'",
+      "answer": "neutral",
+      "expected": "neutral",
+      "correct": true,
+      "metadata": {
+        "domain": "sentiment",
+        "conf": 0.7768509207168068,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "f9",
+      "domain": "factual",
+      "prompt": "What is the speed of light in km/s?",
+      "answer": "Unable to determine",
+      "expected": "300000",
+      "correct": false,
       "metadata": {
         "domain": "factual",
-        "conf": 0.939151701236962,
+        "conf": 0.770500410156778,
         "tier": "local",
-        "reason": "validator-fail-local-only",
+        "reason": "remote-failed",
         "model": "local"
       }
     },
     {
-      "task_id": "t5",
+      "task_id": "f7",
+      "domain": "factual",
+      "prompt": "What is the largest planet in our solar system?",
+      "answer": "Unable to determine",
+      "expected": "Jupiter",
+      "correct": false,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.8313659754308567,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n2",
       "domain": "ner",
-      "prompt": "Extract entities from: 'Apple CEO Tim Cook visited London in March 2024'",
+      "prompt": "Extract entities: 'Barack Obama was born in Honolulu, Hawaii on August 4, 1961.'",
       "answer": "Unable to determine",
       "expected": "",
       "correct": false,
       "metadata": {
         "domain": "ner",
-        "conf": 0.6401512681083018,
+        "conf": 0.5558086318863046,
         "tier": "local",
-        "reason": "timeout-local-only",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n1",
+      "domain": "ner",
+      "prompt": "Extract named entities from: 'Elon Musk founded SpaceX in 2002 in Hawthorne, California.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.8470417952387087,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n5",
+      "domain": "ner",
+      "prompt": "Find entities: 'Microsoft acquired Activision Blizzard in October 2023.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.6031841060284455,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n4",
+      "domain": "ner",
+      "prompt": "Extract all named entities: 'Google CEO Sundar Pichai spoke at the Paris AI Summit in January 2024.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.7208960693014563,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d2",
+      "domain": "debugging",
+      "prompt": "Fix this code:\ndef add(a, b):\n    return a - b",
+      "answer": "def add(a, b):\n    return a + b",
+      "expected": "a + b",
+      "correct": true,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.9209765232339321,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n3",
+      "domain": "ner",
+      "prompt": "Identify named entities in: 'Apple Inc. released the iPhone 15 in September 2023 in Cupertino.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.7835243793370124,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d4",
+      "domain": "debugging",
+      "prompt": "Fix the bug:\ndef is_even(n):\n    return n % 2 == 1",
+      "answer": "return n % 2 == 0",
+      "expected": "== 0",
+      "correct": true,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.9240074063916783,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n7",
+      "domain": "ner",
+      "prompt": "Extract entities from: 'The United Nations held a climate conference in Dubai in December 2023.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.643908666679608,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d1",
+      "domain": "debugging",
+      "prompt": "Fix this Python code:\ndef factorial(n):\n    return n * factorial(n)",
+      "answer": "Unable to determine",
+      "expected": "factorial(n-1)",
+      "correct": false,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.8638301408427304,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d5",
+      "domain": "debugging",
+      "prompt": "Fix:\ndef greet(name):\n    print('Hello ' + name + '!')\ngreet(42)",
+      "answer": "Unable to determine",
+      "expected": "str(name)",
+      "correct": false,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.4700300563134773,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n6",
+      "domain": "ner",
+      "prompt": "Named Entity Recognition: 'Taylor Swift performed in London on June 21, 2024.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.6871922874517594,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d3",
+      "domain": "debugging",
+      "prompt": "Debug:\ndef divide(a, b):\n    return a / b\n# crashes when b=0",
+      "answer": "Unable to determine",
+      "expected": "if b == 0",
+      "correct": false,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.5871404768757569,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d7",
+      "domain": "debugging",
+      "prompt": "Fix this off-by-one error:\ndef sum_to_n(n):\n    total = 0\n    for i in range(n):\n        total += i\n    return total",
+      "answer": "Unable to determine",
+      "expected": "range(n+1)",
+      "correct": false,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.8853497804477832,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "c1",
+      "domain": "codegen",
+      "prompt": "Write a Python function that returns the sum of all even numbers in a list.",
+      "answer": "Unable to determine",
+      "expected": "def",
+      "correct": false,
+      "metadata": {
+        "domain": "codegen",
+        "conf": 0.8467741713000082,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "c2",
+      "domain": "codegen",
+      "prompt": "Write a Python function to check if a string is a palindrome.",
+      "answer": "Unable to determine",
+      "expected": "def",
+      "correct": false,
+      "metadata": {
+        "domain": "codegen",
+        "conf": 0.8853086649697208,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "d6",
+      "domain": "debugging",
+      "prompt": "What is wrong and fix it:\ndef square_list(lst):\n    return [x^2 for x in lst]",
+      "answer": "Unable to determine",
+      "expected": "x**2",
+      "correct": false,
+      "metadata": {
+        "domain": "debugging",
+        "conf": 0.8460237732303122,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "c3",
+      "domain": "codegen",
+      "prompt": "Write a Python function that finds the maximum element in a list without using max().",
+      "answer": "Unable to determine",
+      "expected": "def",
+      "correct": false,
+      "metadata": {
+        "domain": "codegen",
+        "conf": 0.9817563044879455,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l1",
+      "domain": "logic",
+      "prompt": "All cats are animals. Fluffy is a cat. Is Fluffy an animal?",
+      "answer": "Unable to determine",
+      "expected": "Yes",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.7686156232222415,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "c4",
+      "domain": "codegen",
+      "prompt": "Write Python code to count the frequency of each word in a string.",
+      "answer": "Unable to determine",
+      "expected": "def",
+      "correct": false,
+      "metadata": {
+        "domain": "codegen",
+        "conf": 0.7573834787599765,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l3",
+      "domain": "logic",
+      "prompt": "All birds can fly. Penguins are birds. Can penguins fly?",
+      "answer": "Unable to determine",
+      "expected": "No",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.7377635403108432,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "c5",
+      "domain": "codegen",
+      "prompt": "Write a Python function to reverse a string without using slicing.",
+      "answer": "Unable to determine",
+      "expected": "def",
+      "correct": false,
+      "metadata": {
+        "domain": "codegen",
+        "conf": 0.9656009137294685,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l2",
+      "domain": "logic",
+      "prompt": "If it rains, the ground gets wet. The ground is wet. Did it necessarily rain?",
+      "answer": "Unable to determine",
+      "expected": "No",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.7066232620204579,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l4",
+      "domain": "logic",
+      "prompt": "A bat and a ball cost $1.10 in total. The bat costs $1 more than the ball. How much does the ball cost?",
+      "answer": "Unable to determine",
+      "expected": "0.05",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.3471729367578477,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l5",
+      "domain": "logic",
+      "prompt": "If A > B and B > C, then is A > C?",
+      "answer": "Unable to determine",
+      "expected": "Yes",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.8331374701082872,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l6",
+      "domain": "logic",
+      "prompt": "There are 3 boxes: one has apples, one has oranges, one has both. All labels are wrong. You pick one fruit from the box labeled 'Both'. It's an apple. What does that box actually contain?",
+      "answer": "Unable to determine",
+      "expected": "apples",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.6262293550171414,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l8",
+      "domain": "logic",
+      "prompt": "John is taller than Mike. Mike is taller than Sarah. Who is the shortest?",
+      "answer": "Unable to determine",
+      "expected": "Sarah",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.7983891096715247,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l7",
+      "domain": "logic",
+      "prompt": "A man builds a house with all 4 sides facing south. A bear walks past. What color is the bear?",
+      "answer": "Unable to determine",
+      "expected": "white",
+      "correct": false,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.44631930720643964,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "sum1",
+      "domain": "summarization",
+      "prompt": "Summarize in 2 sentences:\nArtificial intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn. AI has applications in many fields including medicine, finance, and transportation. Modern AI systems use neural networks trained on large datasets to perform tasks such as image recognition, language translation, and decision-making. The rapid advancement of AI has raised both exciting opportunities and significant ethical questions about privacy, employment, and autonomous decision-making.",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.20798374791473007,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m15",
+      "domain": "math",
+      "prompt": "What is the derivative of x^3 + 2x^2 - 5x + 1 with respect to x evaluated at x = 2?",
+      "answer": "2",
+      "expected": "15",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7984786061677999,
+        "tier": "direct",
+        "reason": "deterministic",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m13",
+      "domain": "math",
+      "prompt": "If a bacteria population doubles every 12 hours, and starts with 100 bacteria, how many will there be after exactly 3 days?",
+      "answer": "Unable to determine",
+      "expected": "6400",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.3792351467639901,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "sum2",
+      "domain": "summarization",
+      "prompt": "Give a brief summary:\nThe Amazon rainforest is the world's largest tropical rainforest, covering over 5.5 million square kilometers across nine countries in South America. It is home to an estimated 10% of all species on Earth and plays a crucial role in regulating the global climate by absorbing vast amounts of carbon dioxide. However, deforestation driven by agriculture, logging, and infrastructure development has destroyed significant portions of the forest, threatening both biodiversity and climate stability.",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": true,
+      "metadata": {
+        "domain": "factual",
+        "conf": 0.453218230088147,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m14",
+      "domain": "math",
+      "prompt": "Solve for x in the equation: 3(x - 4) + 5 = 2(x + 1)",
+      "answer": "Unable to determine",
+      "expected": "9",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.5136195876021262,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "sum3",
+      "domain": "summarization",
+      "prompt": "Summarize this in one sentence:\nThe Industrial Revolution, which began in Britain in the late 18th century, transformed manufacturing processes through the introduction of machinery, steam power, and factory systems. This period of rapid industrialization fundamentally changed how goods were produced and led to massive urbanization as workers moved from rural areas to cities to find employment in factories.",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": true,
+      "metadata": {
+        "domain": "summarization",
+        "conf": 0.3628786044623849,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m16",
+      "domain": "math",
+      "prompt": "If a train leaves Station A at 60 mph and another leaves Station B at 90 mph heading towards each other, and they are 300 miles apart, how long until they meet in hours?",
+      "answer": "Unable to determine",
+      "expected": "2",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.36548871508976216,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m17",
+      "domain": "math",
+      "prompt": "I have 60 more apples than oranges. If I have 100 fruits in total, how many oranges do I have?",
+      "answer": "Unable to determine",
+      "expected": "20",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 1.0,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "m18",
+      "domain": "math",
+      "prompt": "Evaluate the definite integral of 2x dx from 0 to 3.",
+      "answer": "Unable to determine",
+      "expected": "9",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.7414912698148631,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l9",
+      "domain": "logic",
+      "prompt": "A knight always tells the truth, and a knave always lies. A says 'I am a knave'. Is A a knight, a knave, or is this impossible?",
+      "answer": "Unable to determine",
+      "expected": "impossible",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 1.0,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l10",
+      "domain": "logic",
+      "prompt": "Sally has 3 brothers. Each brother has 2 sisters. How many sisters does Sally have?",
+      "answer": "Unable to determine",
+      "expected": "1",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.3068848520222884,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l11",
+      "domain": "logic",
+      "prompt": "Mary's father has 5 daughters: 1. Nana, 2. Nene, 3. Nini, 4. Nono. What is the name of the fifth daughter?",
+      "answer": "Unable to determine",
+      "expected": "Mary",
+      "correct": false,
+      "metadata": {
+        "domain": "math",
+        "conf": 0.37697899136315505,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l13",
+      "domain": "logic",
+      "prompt": "There are 5 people in a room. You go in and kill 4 of those 5. How many people are left in that room?",
+      "answer": "Unable to determine",
+      "expected": "6",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.2841297394351454,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "l12",
+      "domain": "logic",
+      "prompt": "If you pass the person in second place in a race, what place are you in?",
+      "answer": "Unable to determine",
+      "expected": "second",
+      "correct": false,
+      "metadata": {
+        "domain": "logic",
+        "conf": 0.4076332506916991,
+        "tier": "local",
+        "reason": "remote-failed",
+        "model": "local"
+      }
+    },
+    {
+      "task_id": "n8",
+      "domain": "ner",
+      "prompt": "Extract entities: 'The Cupertino headquarters of Apple will host Tim Cook on Tuesday.'",
+      "answer": "Unable to determine",
+      "expected": "",
+      "correct": false,
+      "metadata": {
+        "domain": "ner",
+        "conf": 0.4753913137802815,
+        "tier": "local",
+        "reason": "remote-failed",
         "model": "local"
       }
     }

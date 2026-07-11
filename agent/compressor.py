@@ -3,41 +3,46 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 class DomainCompressor:
     """
-    A zero-dependency prompt compressor.
-    Safely reduces input tokens by cleaning markdown/whitespace and intelligently
-    truncating prose using TF-IDF for summarization tasks, while protecting code blocks.
+    Safe prompt compressor — accuracy-first.
+
+    Per HACKATHON_WINNING_PLAN.md:
+    - Keep the full original prompt for logic, math, NER, and code unless extremely long.
+    - Remove only whitespace, markdown noise, and irrelevant trace clutter.
+    - Do NOT use TF-IDF sentence deletion for constraint-heavy tasks.
+    - Do NOT over-compress summarization input.
     """
     def __init__(self):
         self.vectorizer = TfidfVectorizer(stop_words='english')
 
-    def compress(self, prompt: str, domain: str, max_chars: int = 1200) -> str:
-        if domain in {"logic", "math"}:
-            return self._preserve_reasoning_prompt(prompt, max_chars=2400)
+    def compress(self, prompt: str, domain: str, max_chars: int = 4000) -> str:
+        # Domains where we must preserve the full prompt (reasoning/extraction critical)
+        if domain in {"logic", "math", "ner"}:
+            return self._preserve_reasoning_prompt(prompt, max_chars=max_chars)
 
-        # 1. Base Cleanup (Whitespace & Markdown)
+        # 1. Base Cleanup (Whitespace & Markdown) — safe for all domains
         cleaned = self._safe_cleanup(prompt)
 
-        # 2. Domain-Aware Compression
+        # 2. Domain-Aware Compression (only for very long prompts)
         if len(cleaned) > max_chars:
-            if domain == "summarization":
-                cleaned = self._tfidf_summarize(cleaned, max_chars)
-            elif domain in ["codegen", "debugging"]:
+            if domain in ["codegen", "debugging"]:
                 cleaned = self._compress_code_prompt(cleaned, max_chars)
-            
-        # 3. Final Failsafe Truncation (60/40 Split)
+            # summarization: do NOT TF-IDF delete sentences (can remove key facts)
+            # just truncate if truly huge
+
+        # 3. Final Failsafe Truncation (70/30 Split — keep more context)
         if len(cleaned) > max_chars:
-            keep_start = int(max_chars * 0.6)
+            keep_start = int(max_chars * 0.7)
             keep_end = max_chars - keep_start
             cleaned = cleaned[:keep_start] + "\n\n[...truncated...]\n\n" + cleaned[-keep_end:]
 
         return cleaned
 
     def _preserve_reasoning_prompt(self, prompt: str, max_chars: int) -> str:
-        """Keep logic/math wording intact; only trim if it is truly huge."""
+        """Keep logic/math/NER wording intact; only trim if it is truly huge."""
         text = prompt.strip()
         if len(text) <= max_chars:
             return text
-        keep_start = int(max_chars * 0.55)
+        keep_start = int(max_chars * 0.6)
         keep_end = max_chars - keep_start
         return text[:keep_start] + "\n\n[...middle omitted...]\n\n" + text[-keep_end:]
 
@@ -63,44 +68,6 @@ class DomainCompressor:
             text = text.replace(f"__CODE_BLOCK_{i}__", block)
 
         return text.strip()
-
-    def _tfidf_summarize(self, text: str, target_chars: int) -> str:
-        """Uses TF-IDF to rank sentences and discard the least important ones."""
-        # Simple sentence splitter
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        if len(sentences) < 5:
-            return text
-
-        try:
-            tfidf_matrix = self.vectorizer.fit_transform(sentences)
-            scores = tfidf_matrix.sum(axis=1).A1
-            
-            # Rank sentences by score
-            ranked_sentences = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-            
-            # Keep picking the top sentences until we hit the budget
-            kept_indices = []
-            current_chars = 0
-            for idx, score in ranked_sentences:
-                # Always keep the first and last sentence for context
-                if idx == 0 or idx == len(sentences) - 1:
-                    continue
-                
-                if current_chars + len(sentences[idx]) > target_chars:
-                    break
-                kept_indices.append(idx)
-                current_chars += len(sentences[idx])
-            
-            # Add back first and last sentence
-            kept_indices.append(0)
-            kept_indices.append(len(sentences) - 1)
-            
-            # Reconstruct in original order
-            kept_indices = sorted(list(set(kept_indices)))
-            return " ".join([sentences[i] for i in kept_indices])
-        except Exception:
-            # Fallback if TF-IDF fails (e.g. no vocab)
-            return text
 
     def _compress_code_prompt(self, text: str, target_chars: int) -> str:
         """Trims excessive tracebacks but protects code."""
