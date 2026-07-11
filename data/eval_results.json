@@ -1,9 +1,9 @@
 {
-  "mode": "hybrid",
-  "accuracy": 1.0,
-  "correct": 5,
+  "mode": "local",
+  "accuracy": 0.8,
+  "correct": 4,
   "total": 5,
-  "elapsed_s": 18.412323100026697,
+  "elapsed_s": 12.152707199998986,
   "domain_stats": {
     "math": {
       "correct": 1,
@@ -22,7 +22,7 @@
       "total": 1
     },
     "ner": {
-      "correct": 1,
+      "correct": 0,
       "total": 1
     }
   },
@@ -82,24 +82,24 @@
       "metadata": {
         "domain": "factual",
         "conf": 0.939151701236962,
-        "tier": "remote",
-        "reason": "remote-first",
-        "model": "accounts/fireworks/models/minimax-m3"
+        "tier": "local",
+        "reason": "validator-fail-local-only",
+        "model": "local"
       }
     },
     {
       "task_id": "t5",
       "domain": "ner",
       "prompt": "Extract entities from: 'Apple CEO Tim Cook visited London in March 2024'",
-      "answer": "{\"person\":[\"Tim Cook\"],\"org\":[\"Apple\"],\"location\":[\"London\"],\"date\":[\"March 2024\"]}",
+      "answer": "Unable to determine",
       "expected": "",
-      "correct": true,
+      "correct": false,
       "metadata": {
         "domain": "ner",
         "conf": 0.6401512681083018,
-        "tier": "remote",
-        "reason": "remote-first",
-        "model": "accounts/fireworks/models/minimax-m3"
+        "tier": "local",
+        "reason": "timeout-local-only",
+        "model": "local"
       }
     }
   ]

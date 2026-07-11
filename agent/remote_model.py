@@ -33,7 +33,7 @@ REMOTE_SYSTEM_PROMPTS = {
     "summarization": "Write a concise summary only. No preamble like 'Here is a summary:'.",
     "debugging":     "Return only the corrected code. No explanation.",
     "codegen":       "Return only working Python code. No explanation or markdown unless explicitly requested.",
-    "logic":         "Answer accurately and concisely. State your final answer clearly on the last line.",
+    "logic":         "Solve accurately. Give the final answer clearly. Do not force yes/no unless the task asks yes/no.",
     "factual":       "Return the direct answer only. One sentence or less. No extra facts.",
 }
 
@@ -93,7 +93,7 @@ class RemoteModel:
         if domain == "factual":
             format_hint = "\n\nDirect answer only (one word or short phrase):"
         elif domain == "logic":
-            format_hint = "\n\nFinal answer (Yes or No, then brief reason if needed):"
+            format_hint = "\n\nFinal answer:"
         elif domain == "sentiment":
             format_hint = "\n\nLabel (positive, negative, or neutral):"
         elif domain == "ner":
@@ -108,7 +108,7 @@ class RemoteModel:
                     user=f"Task:\n{compressed}{format_hint}\n\nAnswer:",
                     max_tokens=max_tok,
                     model=model,
-                    reasoning=False, # Dual-sweep: first try with reasoning off
+                    reasoning=self._use_reasoning(domain),
                 )
                 return result, model
             except httpx.HTTPStatusError as e:
@@ -177,14 +177,14 @@ class RemoteModel:
         raise last_exc or Exception("All remote correction models failed")
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=2),
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
         self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False, disable_reasoning_param: bool = False
     ) -> str:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=12.0) as client:
             payload = {
                 "model": model,
                 "messages": [
@@ -250,6 +250,9 @@ class RemoteModel:
         if conf < 0.65:
             score += 1
         return score
+
+    def _use_reasoning(self, domain: str) -> bool:
+        return domain in {"logic", "math", "debugging", "codegen"}
 
     def _pick_models(
         self,

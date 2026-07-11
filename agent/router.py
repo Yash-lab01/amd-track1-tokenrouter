@@ -23,8 +23,8 @@ CLASSIFIER_CONF_THRESHOLD = 0.65
 # NER removed from LOCAL_TRUST: on 2 vCPU, generating 60-100 token JSON takes
 # 12-30 seconds per task and serialises through max_workers=1, causing TIMEOUT.
 # Remote NER with strict JSON system prompt is faster and more accurate.
-LOCAL_TRUST_DOMAINS = {"sentiment"}
-REMOTE_FIRST_DOMAINS = {"factual", "summarization", "logic", "debugging", "codegen", "ner"}
+LOCAL_TRUST_DOMAINS = set()
+REMOTE_FIRST_DOMAINS = {"factual", "summarization", "logic", "debugging", "codegen", "ner", "sentiment"}
 RETRY_DOMAINS = {"ner", "sentiment", "debugging", "codegen", "math"}
 
 _SPATIAL_CONSTRAINT_KEYWORDS = [
@@ -84,7 +84,7 @@ class HybridRouter:
 
         is_semantic_trap = False
         trap_reason, trap_score = "", 0.0
-        if os.environ.get("ENABLE_TFIDF_TRAP_DETECTOR", "1") == "1":
+        if os.environ.get("ENABLE_TFIDF_TRAP_DETECTOR", "0") == "1":
             is_semantic_trap, trap_reason, trap_score = self.traps.is_trap(prompt)
 
         # SPATIAL PUZZLE & HALLUCINATION INTERCEPT:
