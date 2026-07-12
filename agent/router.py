@@ -90,14 +90,8 @@ class HybridRouter:
         self._answer_cache: dict[str, tuple[str, dict]] = {}
 
     def _get_local_model(self):
-        """Lazy-load local model only when needed for emergency fallback."""
-        if self._local_model is None and _LOCAL_MODEL_AVAILABLE:
-            try:
-                self._local_model = LocalModel()
-            except Exception as e:
-                print(f"[Router] Failed to load local model: {e}", flush=True)
-                self._local_model = None
-        return self._local_model
+        """Return the pre-loaded local model."""
+        return self.local
 
     async def route_async(self, prompt: str) -> tuple[str, dict]:
         """Route one prompt and return (answer_string, metadata_dict).
