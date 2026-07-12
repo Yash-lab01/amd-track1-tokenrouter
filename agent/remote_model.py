@@ -3,11 +3,12 @@ remote_model.py
 ---------------
 Async Fireworks AI client — Remote-First Accuracy Engine with:
 - Chain-of-Thought prompting with answer extraction
-- Self-consistency voting for math/logic (3 parallel calls)
+- Self-consistency voting for math/logic (2 parallel calls)
 - Few-shot examples in system prompts
 - Judge-aware prompts (sentiment needs reason, factual needs explanation)
 - Model specialization per domain
 - Dynamic max_tokens based on prompt complexity
+- Robust retry logic with increased timeouts for reliability
 """
 import re
 import asyncio
@@ -62,7 +63,7 @@ RETRY_SYSTEM_PROMPTS = {
     "summarization": "Follow the exact format requested. Capture both main points and challenges.",
 }
 
-# Domains that use self-consistency voting (3 parallel calls, majority vote)
+# Domains that use self-consistency voting (2 parallel calls, majority vote)
 SELF_CONSISTENCY_DOMAINS = {"math", "logic"}
 
 # Model specialization per the plan
@@ -152,14 +153,14 @@ class RemoteModel:
         models: list[str],
         conf: float,
     ) -> tuple[str, str]:
-        """Generate 3 responses in parallel and take majority vote on extracted answer."""
+        """Generate 2 responses in parallel and take majority vote on extracted answer."""
         format_hint = self._get_format_hint(domain)
         user_prompt = f"Task:\n{compressed}{format_hint}\n\nAnswer:"
         
-        # Use the best available model for all 3 calls
+        # Use the best available model for all calls
         model = models[0] if models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
         
-        # Launch 2 parallel calls with slightly different temperatures (reduced from 3 for token savings)
+        # Launch 2 parallel calls with slightly different temperatures
         tasks = []
         temps = [0.1, 0.3]  # Low variance for consistency
         for temp in temps:
@@ -241,29 +242,38 @@ class RemoteModel:
     async def _call_with_temp(
         self, system: str, user: str, max_tokens: int, model: str, temperature: float
     ) -> str:
-        """Make a call with a specific temperature (for self-consistency)."""
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "top_p": 0.95,
-            }
-            
-            resp = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
+        """Make a call with a specific temperature (for self-consistency).
+        Includes manual retry logic for reliability."""
+        last_exc = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    payload = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                        "top_p": 0.95,
+                    }
+                    
+                    resp = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    )
+                    resp.raise_for_status()
+                    return resp.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                last_exc = e
+                if attempt < 2:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+        raise last_exc
 
     def _get_format_hint(self, domain: str) -> str:
         """Domain-specific format hints appended to user prompt."""
@@ -332,14 +342,14 @@ class RemoteModel:
         raise last_exc or Exception("All remote correction models failed")
 
     @retry(
-        stop=stop_after_attempt(2),
-        wait=wait_exponential(multiplier=0.5, min=0.5, max=2),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=3),
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
         self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False
     ) -> str:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=25.0) as client:
             payload = {
                 "model": model,
                 "messages": [

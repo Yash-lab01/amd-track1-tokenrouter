@@ -101,14 +101,13 @@ class LocalModel:
         if model_path is None:
             model_path = os.environ.get(
                 "LOCAL_MODEL_PATH",
-                "./models/qwen2.5-3b-instruct-q4_k_m.gguf"
+                "./models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
             )
 
         if not os.path.exists(model_path):
-            # Try 1.5B as fallback if 3B not available
-            fallback_path = "./models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+            fallback_path = "./models/gemma-2b-instruct-q4.gguf"
             if os.path.exists(fallback_path):
-                print(f"[LocalModel] 3B model missing, using 1.5B fallback: {fallback_path}")
+                print(f"[LocalModel] Preferred model missing, using fallback: {fallback_path}")
                 model_path = fallback_path
 
         if not os.path.exists(model_path):

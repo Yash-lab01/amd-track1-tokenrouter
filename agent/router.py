@@ -1,20 +1,23 @@
 """
 router.py
 ---------
-Smart Hybrid Token-Efficient Router — Remote-First with Local Token Savings.
+Pure Remote-First Token-Efficient Router.
 
 Strategy:
 1. Tier 0: Deterministic solvers (0 tokens) — math, facts, sentiment rules, code fixes
-2. Tier 1: Local LLM for token-saving domains (sentiment, summarization) — 0 remote tokens if valid
-   - Sentiment: Local 3B model generates "Label: reason" (judge-aware)
-   - Summarization: Local 3B model generates summary, validate format locally
-3. Tier 2: Remote Fireworks AI (remote tokens) — NER, logic, debugging, codegen, factual, + fallback
+2. Tier 1: Remote Fireworks AI (remote tokens) — ALL other domains
    - CoT prompts, self-consistency voting, few-shot, judge-aware
-4. Emergency: Local model if remote completely fails
+3. Emergency: Local model if remote completely fails
 
-This cuts token usage 30-50% while maintaining 85%+ accuracy, because:
-- Sentiment and summarization have format requirements we can validate locally
-- NER/code/debugging/logic require CORRECTNESS that only remote models can guarantee
+This is the "Last-Resort Finals Mode" from the winning plan:
+- exact local rules first
+- otherwise remote
+- no local LLM generation in normal path
+- one retry for malformed NER/code/logic
+- answer-only outputs
+- strict postprocessing
+
+Accuracy comes from remote models. Token savings come from deterministic solvers.
 """
 import asyncio
 import os
@@ -23,11 +26,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from agent.classifier import DomainClassifier
-from agent.evaluator import postprocess, try_solve_locally, validate, validate_summarization_format
+from agent.evaluator import postprocess, try_solve_locally, validate
 from agent.remote_model import RemoteModel
 from agent.trap_detector import TrapDetector
 
-# Local model is optional — used for local-first validation + emergency fallback.
+# Local model is optional — used ONLY for emergency fallback.
 try:
     from agent.local_model import LocalModel
     _LOCAL_MODEL_AVAILABLE = True
@@ -38,11 +41,6 @@ except (ImportError, ModuleNotFoundError):
 
 
 CLASSIFIER_CONF_THRESHOLD = 0.65
-
-# Domains where local model saves tokens (format can be validated locally)
-# - Sentiment: "Label: reason" format can be checked
-# - Summarization: sentence/bullet/word count can be checked
-LOCAL_TOKEN_SAVING_DOMAINS = {"sentiment", "summarization"}
 
 # Domains that should retry on validation failure (malformed output only)
 RETRY_DOMAINS = {"ner", "debugging", "codegen", "logic"}
@@ -101,16 +99,15 @@ class HybridRouter:
     async def route_async(self, prompt: str) -> tuple[str, dict]:
         """Route one prompt and return (answer_string, metadata_dict).
 
-        Smart Hybrid flow:
+        Pure Remote-First flow:
         1. Check cache
         2. Classify domain
         3. Check for traps (spatial/hallucination) → force remote
         4. Tier 0: Deterministic solver (exact only) — 0 tokens
-        5. Tier 1: Local LLM for token-saving domains (sentiment, summarization) — 0 remote tokens if valid
-        6. Tier 2: Remote accuracy engine (NER, logic, debugging, codegen, factual + fallback)
-        7. Validate + postprocess
-        8. Retry only on malformed NER/code/logic
-        9. Emergency local fallback if remote fails
+        5. Tier 1: Remote accuracy engine (ALL domains)
+        6. Validate + postprocess
+        7. Retry only on malformed NER/code/logic
+        8. Emergency local fallback if remote fails
         """
         deadline = time.monotonic() + 28.0
         cache_key = f"{self.mode}:{_normalize_cache_prompt(prompt)}"
@@ -137,53 +134,12 @@ class HybridRouter:
             self._answer_cache[cache_key] = (direct, metadata)
             return direct, metadata
 
-        # ── Tier 1: Local LLM for token-saving domains (0 remote tokens if valid!) ──
-        # Sentiment and summarization have format requirements we can validate locally.
-        # The 3B model is good enough for these with judge-aware prompts.
-        if domain in LOCAL_TOKEN_SAVING_DOMAINS and self.local is not None:
-            try:
-                local_answer = await self._generate_local(
-                    prompt, domain, deadline=deadline, timeout=18.0
-                )
-                if local_answer and local_answer.strip():
-                    is_valid, cleaned = validate(domain, prompt, local_answer)
-                    if is_valid:
-                        # Local model passed validation! 0 remote tokens!
-                        metadata = self._trace(domain, conf, "local", "local-validated", model="local")
-                        self._answer_cache[cache_key] = (cleaned, metadata)
-                        return cleaned, metadata
-                    else:
-                        # Local failed validation — try postprocessed version
-                        cleaned = postprocess(domain, local_answer)
-                        if cleaned.strip() and self._is_likely_valid(domain, cleaned):
-                            # Postprocessed version looks good enough
-                            metadata = self._trace(domain, conf, "local", "local-postprocessed", model="local")
-                            self._answer_cache[cache_key] = (cleaned, metadata)
-                            return cleaned, metadata
-                        print(f"[Router] Local model failed validation for {domain}. Falling back to remote.", flush=True)
-            except asyncio.TimeoutError:
-                print(f"[Router] Local model timed out for {domain}. Falling back to remote.", flush=True)
-            except Exception as e:
-                print(f"[Router] Local model error for {domain}: {e}. Falling back to remote.", flush=True)
-
-        # ── Tier 2: Remote accuracy engine ─────────────────────────────
+        # ── Tier 1: Remote accuracy engine (ALL non-deterministic tasks) ──
         answer, metadata = await self._remote_with_retry(
             prompt, domain, conf, deadline
         )
         self._answer_cache[cache_key] = (answer, metadata)
         return answer, metadata
-
-    def _is_likely_valid(self, domain: str, response: str) -> bool:
-        """Quick heuristic check if a postprocessed response is good enough to use."""
-        if not response.strip():
-            return False
-        if domain == "sentiment":
-            lower = response.lower()
-            return any(label in lower for label in ("positive", "negative", "neutral", "mixed"))
-        if domain == "summarization":
-            # Check if it has reasonable content (not just preamble)
-            return len(response.split()) >= 5
-        return True
 
     async def _remote_with_retry(
         self,
@@ -244,11 +200,11 @@ class HybridRouter:
             metadata = self._trace(domain, conf, "local", "remote-failed", model="local")
             return fallback, metadata
 
-    # Timeout for local model — increased for normal routing (not just emergency)
-    _LOCAL_TIMEOUT_S = 18
+    # Timeout for local model — emergency fallback only
+    _LOCAL_TIMEOUT_S = 12
 
     async def _generate_local(self, prompt: str, domain: str, temperature: float = 0.1, deadline: float = 0.0, timeout: float = 0.0) -> str:
-        """Local model generation — used for local-first validation and emergency fallback."""
+        """Local model generation — used for emergency fallback only."""
         if self.local is None:
             raise RuntimeError("Local model not available")
 
