@@ -83,6 +83,7 @@ SELF_CONSISTENCY_DOMAINS = {"logic"}
 REMOTE_CALL_TIMEOUT_S = float(os.environ.get("REMOTE_CALL_TIMEOUT_S", "10"))
 REMOTE_MODEL_CASCADE_LIMIT = int(os.environ.get("REMOTE_MODEL_CASCADE_LIMIT", "2"))
 CONSISTENCY_CALLS = int(os.environ.get("CONSISTENCY_CALLS", "2"))
+CONSISTENCY_ATTEMPTS = int(os.environ.get("CONSISTENCY_ATTEMPTS", "1"))
 
 # Model specialization per the plan
 DOMAIN_MODEL_PREFS: dict[str, list[list[str]]] = {
@@ -284,7 +285,7 @@ class RemoteModel:
         """Make a call with a specific temperature (for self-consistency).
         Includes manual retry logic for reliability."""
         last_exc = None
-        for attempt in range(2):
+        for attempt in range(max(1, CONSISTENCY_ATTEMPTS)):
             try:
                 async with httpx.AsyncClient(timeout=REMOTE_CALL_TIMEOUT_S) as client:
                     payload = {
@@ -308,9 +309,11 @@ class RemoteModel:
                     )
                     resp.raise_for_status()
                     return resp.json()["choices"][0]["message"]["content"].strip()
+            except httpx.HTTPStatusError:
+                raise
             except Exception as e:
                 last_exc = e
-                if attempt < 1:
+                if attempt < max(1, CONSISTENCY_ATTEMPTS) - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
         raise last_exc
 
@@ -383,7 +386,7 @@ class RemoteModel:
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=0.5, min=0.5, max=2),
-        retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
+        retry=retry_if_exception_type((httpx.TimeoutException,)),
     )
     async def _call(
         self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False

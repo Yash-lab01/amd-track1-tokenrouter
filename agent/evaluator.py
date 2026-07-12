@@ -105,19 +105,14 @@ def postprocess(domain: str, response: str) -> str:
         return text.strip()
 
     if domain == "factual":
-        # Judge-aware: keep explanations if the question asks for them
-        # Strip common preambles
+        # Judge-aware: keep complete remote answers. Earlier first-sentence
+        # truncation could destroy explain/compare answers because this function
+        # only sees the response, not the original prompt.
         text = re.sub(
             r"^(?:the answer is|answer:|it is|that would be|yes,?\s+it is|no,?\s+it is)\s*",
             "", text, flags=re.IGNORECASE
         ).strip()
-        # If the question asks to explain, compare, or describe, keep the full answer
-        if re.search(r"\b(explain|difference|compare|describe|why|how)\b", text, re.IGNORECASE):
-            return text
-        # For simple factual questions, take only the first sentence
-        first_sentence = re.split(r'[.!?]\s+[A-Z]|\n', text)[0].strip()
-        first_sentence = first_sentence.rstrip(".!?")
-        return first_sentence if first_sentence else text.split("\n")[0].strip()
+        return text
 
     if domain == "logic":
         # CoT extraction: look for "Final Answer: X" first

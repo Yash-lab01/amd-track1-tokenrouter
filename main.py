@@ -47,7 +47,7 @@ async def process_task(task: dict, router: HybridRouter, semaphore: asyncio.Sema
             return {"task_id": task_id, "answer": "Unable to determine"}
         except Exception as e:
             print(f"[ERROR] Failed processing task {task_id}: {e}", file=sys.stderr, flush=True)
-            return {"task_id": task_id, "answer": f"Error: {e}"}
+            return {"task_id": task_id, "answer": "Unable to determine"}
 
 
 async def main():
