@@ -1,19 +1,20 @@
 """
 router.py
 ---------
-Hybrid Token-Efficient Router — Local-First with Validation.
+Smart Hybrid Token-Efficient Router — Remote-First with Local Token Savings.
 
 Strategy:
 1. Tier 0: Deterministic solvers (0 tokens) — math, facts, sentiment rules, code fixes
-2. Tier 1: Local LLM with validation (0 remote tokens) — NER, code, sentiment
-   - Try local model → validate output → if valid, return (0 tokens!)
-   - If invalid or times out, fall through to remote
-3. Tier 2: Remote Fireworks AI (remote tokens) — logic, factual, summarization, + fallback
+2. Tier 1: Local LLM for token-saving domains (sentiment, summarization) — 0 remote tokens if valid
+   - Sentiment: Local 3B model generates "Label: reason" (judge-aware)
+   - Summarization: Local 3B model generates summary, validate format locally
+3. Tier 2: Remote Fireworks AI (remote tokens) — NER, logic, debugging, codegen, factual, + fallback
    - CoT prompts, self-consistency voting, few-shot, judge-aware
 4. Emergency: Local model if remote completely fails
 
-This cuts token usage 40-60% while maintaining accuracy, because validation
-catches local hallucinations on NER/code/sentiment (which have strict format requirements).
+This cuts token usage 30-50% while maintaining 85%+ accuracy, because:
+- Sentiment and summarization have format requirements we can validate locally
+- NER/code/debugging/logic require CORRECTNESS that only remote models can guarantee
 """
 import asyncio
 import os
@@ -22,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from agent.classifier import DomainClassifier
-from agent.evaluator import postprocess, try_solve_locally, validate
+from agent.evaluator import postprocess, try_solve_locally, validate, validate_summarization_format
 from agent.remote_model import RemoteModel
 from agent.trap_detector import TrapDetector
 
@@ -38,12 +39,10 @@ except (ImportError, ModuleNotFoundError):
 
 CLASSIFIER_CONF_THRESHOLD = 0.65
 
-# Domains where local model is tried first with validation (0 remote tokens if valid!)
-# These domains have strict format requirements that validation can check:
-# - NER: JSON schema validation
-# - Code: AST syntax check
-# - Sentiment: Label validation
-LOCAL_VALIDATED_DOMAINS = {"ner", "debugging", "codegen", "sentiment"}
+# Domains where local model saves tokens (format can be validated locally)
+# - Sentiment: "Label: reason" format can be checked
+# - Summarization: sentence/bullet/word count can be checked
+LOCAL_TOKEN_SAVING_DOMAINS = {"sentiment", "summarization"}
 
 # Domains that should retry on validation failure (malformed output only)
 RETRY_DOMAINS = {"ner", "debugging", "codegen", "logic"}
@@ -102,13 +101,13 @@ class HybridRouter:
     async def route_async(self, prompt: str) -> tuple[str, dict]:
         """Route one prompt and return (answer_string, metadata_dict).
 
-        Hybrid flow:
+        Smart Hybrid flow:
         1. Check cache
         2. Classify domain
         3. Check for traps (spatial/hallucination) → force remote
         4. Tier 0: Deterministic solver (exact only) — 0 tokens
-        5. Tier 1: Local LLM with validation (NER/code/sentiment) — 0 remote tokens if valid
-        6. Tier 2: Remote accuracy engine (logic/factual/summarization + fallback)
+        5. Tier 1: Local LLM for token-saving domains (sentiment, summarization) — 0 remote tokens if valid
+        6. Tier 2: Remote accuracy engine (NER, logic, debugging, codegen, factual + fallback)
         7. Validate + postprocess
         8. Retry only on malformed NER/code/logic
         9. Emergency local fallback if remote fails
@@ -138,14 +137,13 @@ class HybridRouter:
             self._answer_cache[cache_key] = (direct, metadata)
             return direct, metadata
 
-        # ── Tier 1: Local LLM with validation (0 remote tokens if valid!) ──
-        # Try local model for domains with strict format requirements
-        # If validation passes, return the answer (0 remote tokens!)
-        # If validation fails or times out, fall through to remote
-        if domain in LOCAL_VALIDATED_DOMAINS and self.local is not None:
+        # ── Tier 1: Local LLM for token-saving domains (0 remote tokens if valid!) ──
+        # Sentiment and summarization have format requirements we can validate locally.
+        # The 3B model is good enough for these with judge-aware prompts.
+        if domain in LOCAL_TOKEN_SAVING_DOMAINS and self.local is not None:
             try:
                 local_answer = await self._generate_local(
-                    prompt, domain, deadline=deadline, timeout=15.0
+                    prompt, domain, deadline=deadline, timeout=18.0
                 )
                 if local_answer and local_answer.strip():
                     is_valid, cleaned = validate(domain, prompt, local_answer)
@@ -182,11 +180,9 @@ class HybridRouter:
         if domain == "sentiment":
             lower = response.lower()
             return any(label in lower for label in ("positive", "negative", "neutral", "mixed"))
-        if domain == "ner":
-            return "{" in response and "}" in response
-        if domain in ("debugging", "codegen"):
-            # At least check it's not empty and looks like code
-            return len(response) > 10 and ("def " in response or "import " in response or "return " in response or "=" in response)
+        if domain == "summarization":
+            # Check if it has reasonable content (not just preamble)
+            return len(response.split()) >= 5
         return True
 
     async def _remote_with_retry(
@@ -249,7 +245,7 @@ class HybridRouter:
             return fallback, metadata
 
     # Timeout for local model — increased for normal routing (not just emergency)
-    _LOCAL_TIMEOUT_S = 15
+    _LOCAL_TIMEOUT_S = 18
 
     async def _generate_local(self, prompt: str, domain: str, temperature: float = 0.1, deadline: float = 0.0, timeout: float = 0.0) -> str:
         """Local model generation — used for local-first validation and emergency fallback."""

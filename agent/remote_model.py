@@ -18,17 +18,17 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from agent.compressor import DomainCompressor
 
-# Output token caps — accuracy-first with dynamic scaling
-# Increased for judge-aware prompts (sentiment needs reason, factual needs explanation)
+# Output token caps — tightened for token efficiency
+# Sentiment/summarization handled locally when possible, so these are fallback caps
 REMOTE_MAX_TOKENS = {
-    "sentiment":      100,  # Needs label + one-sentence reason
-    "factual":       300,   # Needs answer + brief explanation
-    "math":          500,   # CoT
-    "ner":           300,   # Needs all entities with labels
-    "summarization": 400,   # Needs exact format (sentences/bullets)
-    "debugging":     600,
-    "codegen":       700,
-    "logic":         600,   # CoT
+    "sentiment":      60,   # Fallback only — usually handled locally (label + reason)
+    "factual":       200,   # Answer + brief explanation
+    "math":          400,   # CoT
+    "ner":           250,   # Needs all entities with labels
+    "summarization": 250,   # Fallback only — usually handled locally
+    "debugging":     500,
+    "codegen":       600,
+    "logic":         500,   # CoT
 }
 
 # Judge-aware system prompts with few-shot examples
@@ -159,9 +159,9 @@ class RemoteModel:
         # Use the best available model for all 3 calls
         model = models[0] if models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
         
-        # Launch 3 parallel calls with slightly different temperatures
+        # Launch 2 parallel calls with slightly different temperatures (reduced from 3 for token savings)
         tasks = []
-        temps = [0.1, 0.3, 0.5]  # Low variance for consistency
+        temps = [0.1, 0.3]  # Low variance for consistency
         for temp in temps:
             tasks.append(self._call_with_temp(system, user_prompt, max_tok, model, temp))
         
@@ -197,7 +197,7 @@ class RemoteModel:
                         return raw, model
                 return best_answer, model
             else:
-                # No majority — return the first response (most likely correct at temp=0.1)
+                # No majority with 2 calls — return the first response (temp=0.1, most likely correct)
                 return raw_responses[0] if raw_responses else answers[0], model
                 
         except Exception as e:
@@ -337,7 +337,7 @@ class RemoteModel:
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
-        self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False, disable_reasoning_param: bool = False
+        self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False
     ) -> str:
         async with httpx.AsyncClient(timeout=15.0) as client:
             payload = {
@@ -350,9 +350,8 @@ class RemoteModel:
                 "temperature": 0.1,
                 "top_p": 0.9,
             }
-            
-            if not reasoning and not disable_reasoning_param:
-                payload["reasoning_effort"] = "none"
+            # NOTE: reasoning_effort parameter removed — it caused 400 errors on Fireworks API
+            # and wasted latency on failed-then-retried calls
 
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -362,10 +361,6 @@ class RemoteModel:
                 },
                 json=payload,
             )
-            
-            if resp.status_code == 400 and not reasoning and not disable_reasoning_param:
-                print(f"[RemoteModel] 400 Bad Request with reasoning_effort=none, retrying without it for {model}", flush=True)
-                return await self._call(system, user, max_tokens, model, reasoning=False, disable_reasoning_param=True)
                 
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()

@@ -309,13 +309,21 @@ def try_factual_rules(prompt: str) -> str | None:
 
 
 def validate_sentiment(response: str) -> tuple[bool, str]:
-    """Validate that the response contains one known sentiment label."""
+    """Validate that the response contains one known sentiment label.
+    
+    Judge-aware: accepts "Label: reason" format (Mixed/Neutral/Positive/Negative).
+    For mixed reviews, the judge accepts Mixed/Neutral/Positive but rejects Negative.
+    """
     cleaned = postprocess("sentiment", response)
     lower = cleaned.lower().strip()
     # Check for "Label: reason" format first (judge-aware)
     label_match = re.match(r"^(positive|negative|neutral|mixed)\s*:", lower)
     if label_match:
         return True, cleaned  # Keep full output with reason
+    # Check for label at start without colon
+    label_match2 = re.match(r"^(positive|negative|neutral|mixed)\b", lower)
+    if label_match2:
+        return True, cleaned
     matches = [label for label in ("positive", "negative", "neutral", "mixed") if label in lower]
     if len(matches) == 1:
         return True, matches[0]
@@ -333,9 +341,67 @@ def validate_math(prompt: str, response: str) -> tuple[bool, str]:
     return False, response
 
 
-def validate_summarization(response: str) -> tuple[bool, str]:
-    """Summarization quality cannot be proven locally."""
+def validate_summarization_format(prompt: str, response: str) -> tuple[bool, str]:
+    """Validate summarization format based on prompt requirements.
+    
+    Checks:
+    - "exactly N sentences" → count sentences
+    - "N bullet points" → count bullets
+    - "under N words" → count words per bullet
+    """
+    cleaned = postprocess("summarization", response)
+    if not cleaned.strip():
+        return False, response
+    
+    lower_prompt = prompt.lower()
+    
+    # Check for "exactly N sentences" requirement
+    sent_match = re.search(r"exactly\s+(\d+)\s+sentences?", lower_prompt)
+    if sent_match:
+        required = int(sent_match.group(1))
+        # Count sentences: split by period, exclamation, or question mark followed by space or end
+        sentences = re.split(r'[.!?]+(?:\s|$)', cleaned.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
+        if len(sentences) == required:
+            return True, cleaned
+        return False, response
+    
+    # Check for "N bullet points" requirement
+    bullet_match = re.search(r"(\d+)\s+bullet\s+points?", lower_prompt)
+    if bullet_match:
+        required = int(bullet_match.group(1))
+        # Count bullets: lines starting with -, •, *, or numbered
+        bullets = re.findall(r'(?:^|\n)\s*(?:[-•*]|\d+\.)\s+(.+)', cleaned)
+        if len(bullets) == required:
+            # Check word limit if specified
+            word_match = re.search(r"(?:under|no longer than|at most)\s+(\d+)\s+words?", lower_prompt)
+            if word_match:
+                max_words = int(word_match.group(1))
+                for bullet in bullets:
+                    if len(bullet.split()) > max_words:
+                        return False, response
+            return True, cleaned
+        return False, response
+    
+    # Check for "in N sentences" (without "exactly")
+    sent_match2 = re.search(r"(?:in|summarize.*?in)\s+(\d+)\s+sentences?", lower_prompt)
+    if sent_match2:
+        required = int(sent_match2.group(1))
+        sentences = re.split(r'[.!?]+(?:\s|$)', cleaned.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
+        if len(sentences) == required:
+            return True, cleaned
+        return False, response
+    
+    # No specific format requirement — accept if it has reasonable content
+    if len(cleaned.split()) >= 5:
+        return True, cleaned
     return False, response
+
+
+def validate_summarization(prompt: str, response: str) -> tuple[bool, str]:
+    """Summarization format validation based on prompt requirements."""
+    return validate_summarization_format(prompt, response)
 
 
 def validate_factual(response: str) -> tuple[bool, str]:
@@ -831,7 +897,7 @@ def validate(domain: str, prompt: str, response: str) -> tuple[bool, str]:
         "codegen": lambda: validate_python_syntax(cleaned),
         "sentiment": lambda: validate_sentiment(cleaned),
         "math": lambda: validate_math(prompt, cleaned),
-        "summarization": lambda: validate_summarization(cleaned),
+        "summarization": lambda: validate_summarization(prompt, cleaned),
         "factual": lambda: validate_factual(cleaned),
         "logic": lambda: validate_logic(cleaned),
     }

@@ -33,11 +33,11 @@ ws ::= [ \t\n]*
 
 # Domain-specific max_tokens for local generation (free, so be generous)
 LOCAL_MAX_TOKENS = {
-    "sentiment":      32,
-    "factual":       100,
+    "sentiment":      80,   # Increased for "Label: reason" format
+    "factual":       150,
     "math":          150,
     "ner":           300,   # Increased for better entity extraction
-    "summarization": 300,
+    "summarization": 400,   # Increased for format-compliant summaries
     "debugging":     450,   # Increased for code fixes
     "codegen":       600,   # Increased for code generation
     "logic":         250,
@@ -57,8 +57,10 @@ SYSTEM_PROMPTS = {
     ),
     "sentiment": (
         "You are a sentiment classifier. "
-        "Reply with EXACTLY one word: positive, negative, or neutral. "
-        "No explanation, no punctuation, just the single label."
+        "Classify the sentiment as Positive, Negative, Neutral, or Mixed. "
+        "If the text has BOTH positive and negative elements, use Mixed or Neutral. "
+        "Format: 'Label: <one-sentence reason that acknowledges BOTH sides>'. "
+        "Example: 'Mixed: The review praises the product quality but criticizes the slow delivery.'"
     ),
     "math": (
         "You are a math solver. "
@@ -67,8 +69,9 @@ SYSTEM_PROMPTS = {
     ),
     "summarization": (
         "You are a summarization expert. "
-        "Write a concise summary of 2-3 sentences. "
-        "Capture the main idea only. Do not copy sentences verbatim."
+        "Follow the EXACT format requested (number of sentences, bullet points, word limits). "
+        "Capture BOTH the main points AND any challenges or concerns mentioned. "
+        "Do not omit either side. No preamble, no 'Here is a summary:' prefix."
     ),
     "debugging": (
         "You are an expert Python debugger. "
@@ -98,13 +101,14 @@ class LocalModel:
         if model_path is None:
             model_path = os.environ.get(
                 "LOCAL_MODEL_PATH",
-                "./models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+                "./models/qwen2.5-3b-instruct-q4_k_m.gguf"
             )
 
         if not os.path.exists(model_path):
-            fallback_path = "./models/gemma-2b-instruct-q4.gguf"
+            # Try 1.5B as fallback if 3B not available
+            fallback_path = "./models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
             if os.path.exists(fallback_path):
-                print(f"[LocalModel] Preferred model missing, using fallback: {fallback_path}")
+                print(f"[LocalModel] 3B model missing, using 1.5B fallback: {fallback_path}")
                 model_path = fallback_path
 
         if not os.path.exists(model_path):
@@ -172,7 +176,7 @@ class LocalModel:
         grammars = {}
         for domain, grammar_text in {
             "ner": NER_GRAMMAR_STRING,
-            "sentiment": SENTIMENT_GRAMMAR_STRING,
+            # Sentiment grammar removed — we now need "Label: reason" format, not single label
         }.items():
             try:
                 grammars[domain] = LlamaGrammar.from_string(grammar_text)

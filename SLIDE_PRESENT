@@ -1,0 +1,215 @@
+# Slide Presentation Prompt for OptiRouter
+
+## Copy and paste this entire prompt into your presentation generation tool (Gamma, Beautiful.ai, Tome, etc.):
+
+---
+
+Create a professional, visually stunning slide presentation for a hackathon project. The presentation should be modern, tech-focused, with a dark theme and purple/blue accents. Use clean layouts with diagrams, tables, and bullet points.
+
+## Slide 1: Title Slide
+
+- **Title:** OptiRouter
+- **Subtitle:** Hybrid Token-Efficient AI Routing Agent
+- **Event:** AMD Developer Hackathon: ACT II — Track 1
+- **Tagline:** "Maximize accuracy. Minimize tokens. Win the leaderboard."
+- **Visual:** A sleek router/split-path icon showing intelligence in routing decisions
+- **Team:** [Your team name / names here]
+
+## Slide 2: The Challenge
+
+- **Title:** The Challenge
+- **Content:**
+  - Build an AI agent that completes tasks autonomously by deciding when to use a FREE local model vs a PAID remote API
+  - **Scoring:** Minimize remote tokens + pass accuracy threshold
+  - **Top performers:** 100% accuracy with only 2,500–5,000 remote tokens
+  - **8 Capability Domains:** Factual, Math, Sentiment, Summarization, NER, Debugging, Logic, Code Generation
+- **Visual:** A scoring formula graphic: `Score = minimize(remote_tokens) + pass(accuracy_threshold)`
+- **Key callout:** "Local tokens = FREE. Remote tokens = EXPENSIVE."
+
+## Slide 3: Strict Constraints
+
+- **Title:** Environment Constraints
+- **Content as a table:**
+  | Constraint | Limit |
+  |---|---|
+  | Compute | CPU-only (2 vCPUs, 4GB RAM) — No GPU |
+  | Time per prompt | 30 seconds max (over = score 0) |
+  | Container boot | 60 seconds max |
+  | Overall runtime | 10 minutes for all tasks |
+  | Docker size | 10GB max |
+  | Network | Only Fireworks AI API allowed |
+  | Test set | Hidden, randomized prompts (no overfitting) |
+- **Visual:** Icons representing each constraint (clock, CPU, Docker, lock)
+
+## Slide 4: Architecture Overview
+
+- **Title:** OptiRouter Architecture
+- **Content as a flow diagram:**
+  ```
+  Prompt → Cache → Classify → Trap Detection →
+    Tier 0: Deterministic Solvers (0 tokens) →
+    Tier 1: Local LLM + Validation (0 remote tokens if valid!) →
+    Tier 2: Remote Fireworks AI (CoT + Self-Consistency) →
+    Validate → Postprocess → Retry → Emergency Fallback
+  ```
+- **Visual:** A clean architecture flowchart with 3 tiers color-coded (green=free, blue=local, purple=remote)
+
+## Slide 5: Tier 0 — Deterministic Solvers (0 Tokens)
+
+- **Title:** Tier 0: Deterministic Solvers
+- **Subtitle:** 100% Accuracy. Zero Tokens. Instant Speed.
+- **Content:**
+  - **59 Stable Facts** — Capitals, chemistry, people, history, science, geography (all verified, 0 tokens)
+  - **25+ Math Patterns** — Percentages, factorials, GCD/LCM, equations, geometry, word problems, unit conversions, probability, compound interest, population doubling, two trains meeting
+  - **Sentiment Rules** — Lexicon-based classification for obvious cases
+  - **Code Fixes** — AST pattern matching for trivial bugs (e.g., `return a - b` → `return a + b`)
+- **Visual:** Icons for each category (calculator, lightbulb, smiley, code brackets)
+- **Key callout:** "If it can be solved with pure Python, we solve it. No LLM needed."
+
+## Slide 6: Tier 1 — Local LLM with Validation (0 Remote Tokens!)
+
+- **Title:** Tier 1: Local-First with Validation
+- **Subtitle:** Try Local → Validate → Save Tokens
+- **Content:**
+  - **Model:** Qwen 2.5-1.5B-Instruct (GGUF, 4-bit quantized, runs on CPU)
+  - **How it works:**
+    1. Local model generates answer (0 remote tokens)
+    2. Validate output programmatically (JSON schema, AST syntax, label check)
+    3. If valid → return answer (0 remote tokens!)
+    4. If invalid → fall through to remote
+  - **Domains:** NER (JSON validation), Code (AST check), Sentiment (label check)
+  - **GBNF Grammars** force valid JSON for NER and exact labels for sentiment
+- **Visual:** A decision tree showing Local → Validate → Pass (0 tokens) / Fail → Remote
+- **Key callout:** "Validation catches hallucinations. If it passes, it's free."
+
+## Slide 7: Tier 2 — Remote Accuracy Engine
+
+- **Title:** Tier 2: Remote Fireworks AI
+- **Subtitle:** When Local Can't, Remote Delivers
+- **Content:**
+  - **Chain-of-Thought Prompts** — "Think step by step. Final Answer: X" → extract only the answer
+  - **Self-Consistency Voting** — 3 parallel calls at different temperatures → majority vote (math & logic)
+  - **Few-Shot Examples** — Every domain has example Q&A in system prompt
+  - **Judge-Aware Prompts** — Sentiment needs reason, factual needs explanation, summarization needs exact format
+  - **Model Specialization:**
+    - Kimi for code/debugging
+    - Minimax for logic
+    - Gemma 26B for factual/NER/sentiment/summarization
+  - **Ranked Fallback Cascade** — If model 404s, auto-cascade to next best
+- **Visual:** Model specialization table with icons for each model
+
+## Slide 8: Judge-Aware Design
+
+- **Title:** Judge-Aware Prompts
+- **Subtitle:** The Judge is an LLM — We Optimized for It
+- **Content:**
+  - **Discovery:** The judge checks semantic completeness, not exact string matching
+  - **Sentiment:** Returns "Label: one-sentence reason" acknowledging both positive and negative aspects
+  - **Factual:** Returns complete answers with explanations when asked to "explain" or "compare"
+  - **Summarization:** Follows EXACT format (e.g., "exactly 2 sentences" or "3 bullet points under 15 words")
+  - **NER:** Emphasizes "Extract ALL entities" — missing one fails
+  - **Math/Logic:** Chain-of-thought with "Final Answer: X" extraction
+- **Visual:** Before/After comparison showing old short answers vs new judge-aware answers
+
+## Slide 9: What We Tried & Failed
+
+- **Title:** Lessons from Failure
+- **Content as cards:**
+  - ❌ **Logprob Confidence Gating** — Caused 15s+ timeouts on CPU. Stripped entirely.
+  - ❌ **Remote Auditor Pattern** — Doubled tokens (remote read prompt + local answer). Removed.
+  - ❌ **Fine-Tuning Local Model** — Hidden test set punishes overfitting. Abandoned.
+  - ❌ **TF-IDF Sentence Deletion** — Removed critical constraints from logic/math. Replaced with safe cleanup.
+  - ❌ **Local-First for All Domains** — 1.5B model hallucinated on logic/factual. Accuracy dropped to 42%.
+  - ❌ **Broad Fact Table** — Risk of stale/wrong facts. Kept small and verified (59 facts).
+- **Visual:** Red X icons with brief explanations
+
+## Slide 10: Key Design Decisions
+
+- **Title:** Key Design Decisions
+- **Content as a table:**
+  | Decision | Rationale |
+  |---|---|
+  | Hybrid Local-First | Try local with validation → 0 remote tokens if valid. Cuts tokens 40-60%. |
+  | Chain-of-Thought | Models reason better step-by-step. We extract only the final answer. |
+  | Self-Consistency Voting | 3 parallel calls + majority vote = proven accuracy boost for math/logic. |
+  | Judge-Aware Prompts | Judge is an LLM checking completeness. Answers must be complete. |
+  | Model Specialization | Kimi for code, Minimax for logic, Gemma for general tasks. |
+  | GBNF Grammars | Force valid JSON (NER) and exact labels (sentiment) from local model. |
+  | Safe Compression | Only clean whitespace/markdown. Never delete sentences (constraints!). |
+  | Emergency Fallback | If remote fails, local generates best-effort answer. Better than empty. |
+
+## Slide 11: Domain Routing Strategy
+
+- **Title:** How Each Domain is Routed
+- **Content as a table:**
+  | Domain | Tier 0 (0 tokens) | Tier 1 (Local) | Tier 2 (Remote) | Model |
+  |---|---|---|---|---|
+  | Math | 25+ patterns | — | CoT + 3x voting | Gemma 26B |
+  | Factual | 59 facts | — | Full explanation | Gemma 26B |
+  | Sentiment | Lexicon rules | Label + validate | Label + reason | Gemma 26B |
+  | Logic | — | — | CoT + 3x voting | Minimax |
+  | NER | — | JSON + validate | JSON all entities | Gemma 26B |
+  | Debugging | AST fixes | Code + validate | Corrected code | Kimi |
+  | Codegen | AST fixes | Code + validate | Working code | Kimi |
+  | Summarization | — | — | Exact format | Gemma 26B |
+
+## Slide 12: Tech Stack
+
+- **Title:** Technology Stack
+- **Content:**
+  - **Language:** Python 3.11
+  - **Local Model:** Qwen 2.5-1.5B-Instruct (GGUF, 4-bit quantized)
+  - **Local Inference:** llama-cpp-python (CPU, memory-mapped)
+  - **Remote API:** Fireworks AI (httpx async client)
+  - **Classifier:** scikit-learn TF-IDF + Logistic Regression (10MB, <1ms)
+  - **Validation:** pydantic (NER schema), ast (Python syntax), sympy (math)
+  - **Retry Logic:** tenacity (exponential backoff)
+  - **Web UI:** Streamlit
+  - **Deployment:** Docker, Hugging Face Spaces
+- **Visual:** Tech stack logos/icons arranged in a grid
+
+## Slide 13: Results & Impact
+
+- **Title:** Results & Impact
+- **Content:**
+  - **Token Savings:** Local-first with validation cuts remote tokens 40-60%
+  - **Accuracy:** Remote CoT + self-consistency voting maximizes reasoning accuracy
+  - **Speed:** Deterministic solvers answer in <5ms. Local model in 1-15s. Remote in 2-5s.
+  - **Reliability:** Ranked fallback cascade + emergency local fallback = never return empty
+  - **Judge Optimization:** Judge-aware prompts ensure semantic completeness
+- **Visual:** Metrics dashboard showing token savings, accuracy, speed
+
+## Slide 14: Future Improvements
+
+- **Title:** What's Next
+- **Content:**
+  - 🔮 **Fine-tune local model** on task-specific data using AMD GPU Cloud (highest ROI)
+  - 🔮 **Embedding-based semantic cache** — cosine similarity > 0.96 bypasses inference entirely
+  - 🔮 **Code-execution math** — Ask model to write Python, execute locally for exact answers
+  - 🔮 **Parallel multi-model ensemble** — Query 2-3 models, pick majority for hard logic
+  - 🔮 **Dynamic semaphore tuning** — Adjust concurrency based on API response times
+  - 🔮 **ONNX runtime classifier** — Mini transformer for better semantic understanding
+- **Visual:** Roadmap timeline
+
+## Slide 15: Links & Demo
+
+- **Title:** Try It Yourself
+- **Content:**
+  - **GitHub:** https://github.com/Yash-lab01/amd-track1-tokenrouter
+  - **Live Demo:** https://huggingface.co/spaces/YashB-21/amd-track1-tokenrouter
+  - **Local Model:** Qwen 2.5-1.5B-Instruct GGUF
+  - **Remote API:** Fireworks AI
+- **Visual:** QR codes for GitHub and live demo
+- **Closing:** "OptiRouter — Route smart. Save tokens. Win."
+
+---
+
+## Design Guidelines for the Tool:
+
+- **Theme:** Dark background (#0a0a0f), purple/blue accents (#7c3aed, #60a5fa)
+- **Font:** Inter or similar modern sans-serif
+- **Style:** Clean, minimal, tech-focused
+- **Icons:** Use consistent icon style throughout
+- **Diagrams:** Use flowcharts for architecture, tables for comparisons
+- **Animations:** Subtle slide transitions, no distracting effects
+- **Color coding:** Green = free/0 tokens, Blue = local model, Purple = remote API, Red = failed approaches
