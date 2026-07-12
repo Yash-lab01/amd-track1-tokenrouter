@@ -90,8 +90,14 @@ class HybridRouter:
         self._answer_cache: dict[str, tuple[str, dict]] = {}
 
     def _get_local_model(self):
-        """Return the pre-loaded local model."""
-        return self.local
+        """Lazy-load the local model only when explicitly enabled."""
+        if os.environ.get("ENABLE_LOCAL_EMERGENCY_FALLBACK", "0") != "1":
+            raise RuntimeError("Local emergency fallback disabled")
+        if not _LOCAL_MODEL_AVAILABLE or LocalModel is None:
+            raise RuntimeError("Local model not available")
+        if self._local_model is None:
+            self._local_model = LocalModel()
+        return self._local_model
 
     async def route_async(self, prompt: str) -> tuple[str, dict]:
         """Route one prompt and return (answer_string, metadata_dict).
@@ -181,6 +187,9 @@ class HybridRouter:
         except Exception as exc:
             # Remote completely failed -- emergency local fallback (lazy-loaded)
             print(f"[WARNING] Remote call failed: {exc}. Emergency local fallback.", flush=True)
+            if os.environ.get("ENABLE_LOCAL_EMERGENCY_FALLBACK", "0") != "1":
+                metadata = self._trace(domain, conf, "remote", "remote-failed-no-local", model="")
+                return "Unable to determine", metadata
             try:
                 local_ans = await self._generate_local(prompt, domain, deadline=deadline)
                 is_val, cleaned_local = validate(domain, prompt, local_ans)

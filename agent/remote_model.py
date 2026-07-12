@@ -12,6 +12,7 @@ Async Fireworks AI client — Remote-First Accuracy Engine with:
 """
 import re
 import asyncio
+import os
 from collections import Counter
 
 import httpx
@@ -66,6 +67,23 @@ RETRY_SYSTEM_PROMPTS = {
 # Domains that use self-consistency voting (3 parallel calls, majority vote)
 SELF_CONSISTENCY_DOMAINS = {"math", "logic"}
 
+# Runtime safety overrides. These preserve reasoning prompts, but prevent a
+# small batch of hard tasks from expanding into dozens of slow remote calls.
+REMOTE_MAX_TOKENS.update({
+    "sentiment": 48,
+    "factual": 160,
+    "math": 160,
+    "ner": 180,
+    "summarization": 220,
+    "debugging": 360,
+    "codegen": 450,
+    "logic": 260,
+})
+SELF_CONSISTENCY_DOMAINS = {"logic"}
+REMOTE_CALL_TIMEOUT_S = float(os.environ.get("REMOTE_CALL_TIMEOUT_S", "10"))
+REMOTE_MODEL_CASCADE_LIMIT = int(os.environ.get("REMOTE_MODEL_CASCADE_LIMIT", "2"))
+CONSISTENCY_CALLS = int(os.environ.get("CONSISTENCY_CALLS", "2"))
+
 # Model specialization per the plan
 DOMAIN_MODEL_PREFS: dict[str, list[list[str]]] = {
     "sentiment": [["gemma", "26b"], ["gemma", "nvfp4"], ["gemma", "31b"], ["gemma"], ["minimax"]],
@@ -109,8 +127,9 @@ class RemoteModel:
         max_tok = self._dynamic_max_tokens(domain, compressed)
         models = self._pick_models(domain, prompt, conf, upgrade=upgrade)
 
-        # Self-consistency voting for math and logic
-        if domain in SELF_CONSISTENCY_DOMAINS:
+        # Self-consistency is reserved for hard logic. Always-on voting caused
+        # too many concurrent remote calls and can trigger scorer TIMEOUT.
+        if self._should_use_consistency(prompt, domain, conf):
             return await self._generate_with_consistency(
                 compressed, system, domain, max_tok, models, conf
             )
@@ -118,7 +137,7 @@ class RemoteModel:
         # Standard single-call generation for other domains
         format_hint = self._get_format_hint(domain)
         last_exc = None
-        for model in models:
+        for model in self._limited_models(models):
             try:
                 result = await self._call(
                     system=system,
@@ -160,9 +179,9 @@ class RemoteModel:
         # Use the best available model for all calls
         model = models[0] if models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
         
-        # Launch 3 parallel calls with slightly different temperatures
+        # Launch a bounded number of calls with slightly different temperatures.
         tasks = []
-        temps = [0.1, 0.3, 0.5]  # Low variance for consistency
+        temps = [0.1, 0.35, 0.55][:max(1, min(CONSISTENCY_CALLS, 3))]
         for temp in temps:
             tasks.append(self._call_with_temp(system, user_prompt, max_tok, model, temp))
         
@@ -203,15 +222,35 @@ class RemoteModel:
                 
         except Exception as e:
             print(f"[RemoteModel] Consistency voting failed: {e}. Falling back to single call.", flush=True)
-            # Fallback to single call
-            result = await self._call(
-                system=system,
-                user=user_prompt,
-                max_tokens=max_tok,
-                model=model,
-                reasoning=self._use_reasoning(domain),
-            )
-            return result, model
+            fallback_models = self._limited_models(models)[1:] or [model]
+            last_exc = None
+            for fallback_model in fallback_models:
+                try:
+                    result = await self._call(
+                        system=system,
+                        user=user_prompt,
+                        max_tokens=max_tok,
+                        model=fallback_model,
+                        reasoning=self._use_reasoning(domain),
+                    )
+                    return result, fallback_model
+                except Exception as fallback_exc:
+                    last_exc = fallback_exc
+                    continue
+            raise last_exc or e
+
+    def _should_use_consistency(self, prompt: str, domain: str, conf: float) -> bool:
+        """Use voting only for hard logic, where it can improve accuracy enough to justify latency."""
+        if os.environ.get("ENABLE_SELF_CONSISTENCY", "1") != "1":
+            return False
+        if domain not in SELF_CONSISTENCY_DOMAINS:
+            return False
+        return self._score_difficulty(prompt, conf) >= 2
+
+    def _limited_models(self, models: list[str]) -> list[str]:
+        """Cap model cascading so one bad task cannot consume the whole scorer budget."""
+        limit = max(1, REMOTE_MODEL_CASCADE_LIMIT)
+        return models[:limit] if models else models
 
     def _extract_final_answer(self, response: str, domain: str) -> str:
         """Extract the final answer from a CoT response."""
@@ -247,7 +286,7 @@ class RemoteModel:
         last_exc = None
         for attempt in range(2):
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with httpx.AsyncClient(timeout=REMOTE_CALL_TIMEOUT_S) as client:
                     payload = {
                         "model": model,
                         "messages": [
@@ -293,7 +332,7 @@ class RemoteModel:
         """Scale max_tokens based on prompt complexity."""
         base = REMOTE_MAX_TOKENS.get(domain, 150)
         # Add tokens for longer prompts (more context = more output needed)
-        extra = min(len(prompt) // 100 * 5, 200)
+        extra = min(len(prompt) // 150 * 4, 80)
         return base + extra
 
     async def generate_correction(
@@ -312,7 +351,7 @@ class RemoteModel:
         max_tok = self._dynamic_max_tokens(domain, self.compressor.compress(prompt, domain))
         
         last_exc = None
-        for model in models:
+        for model in self._limited_models(models):
             try:
                 result = await self._call(
                     system=system,
@@ -349,7 +388,7 @@ class RemoteModel:
     async def _call(
         self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False
     ) -> str:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=REMOTE_CALL_TIMEOUT_S) as client:
             payload = {
                 "model": model,
                 "messages": [

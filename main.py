@@ -34,10 +34,17 @@ async def process_task(task: dict, router: HybridRouter, semaphore: asyncio.Sema
 
         try:
             start = time.monotonic()
-            answer, metadata = await router.route_async(prompt)
+            task_timeout = float(os.environ.get("TASK_TIMEOUT_S", "24"))
+            answer, metadata = await asyncio.wait_for(
+                router.route_async(prompt),
+                timeout=task_timeout,
+            )
             elapsed = time.monotonic() - start
             print(f"  [{elapsed:.2f}s] task_id={task_id} len={len(answer)}", flush=True)
             return {"task_id": task_id, "answer": answer}
+        except asyncio.TimeoutError:
+            print(f"[TIMEOUT] task_id={task_id} exceeded per-task budget", file=sys.stderr, flush=True)
+            return {"task_id": task_id, "answer": "Unable to determine"}
         except Exception as e:
             print(f"[ERROR] Failed processing task {task_id}: {e}", file=sys.stderr, flush=True)
             return {"task_id": task_id, "answer": f"Error: {e}"}
@@ -89,9 +96,9 @@ async def main():
     router = HybridRouter(api_key=api_key, base_url=base_url, allowed_models=allowed_models)
 
     # Semaphore: limits simultaneous remote API calls.
-    # 8 concurrent tasks keeps the pipeline moving faster to avoid 10-minute timeout
-    # while still avoiding HTTP 429 Too Many Requests.
-    semaphore = asyncio.Semaphore(8)
+    # Keep this moderate; too much concurrency can trigger rate limits and slow
+    # the entire batch enough to hit the scorer timeout.
+    semaphore = asyncio.Semaphore(int(os.environ.get("TASK_CONCURRENCY", "5")))
     t_start   = time.monotonic()
 
     futures = [process_task(t, router, semaphore) for t in tasks]
