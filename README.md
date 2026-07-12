@@ -233,7 +233,7 @@ To deploy your own copy:
 | ---------------------------- | -------- | -------------------------------------------- | --------------------------------- |
 | `FIREWORKS_API_KEY`          | ✅ Yes   | —                                            | Your Fireworks AI API key         |
 | `FIREWORKS_BASE_URL`         | No       | `https://api.fireworks.ai/inference/v1`      | Fireworks endpoint                |
-| `ALLOWED_MODELS`             | No       | 5 Fireworks models                           | Comma-separated allowed model IDs |
+| `ALLOWED_MODELS`             | No       | 5 Fireworks models                           | Comma-separated model IDs         |
 | `LOCAL_MODEL_PATH`           | No       | `./models/qwen2.5-1.5b-instruct-q4_k_m.gguf` | Path to the local GGUF model      |
 | `ENABLE_TFIDF_TRAP_DETECTOR` | No       | `0`                                          | Toggle the semantic trap detector |
 | `PORT`                       | No       | `7860`                                       | Port for Streamlit web UI         |
