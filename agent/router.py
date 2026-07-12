@@ -6,18 +6,10 @@ Pure Remote-First Token-Efficient Router.
 Strategy:
 1. Tier 0: Deterministic solvers (0 tokens) — math, facts, sentiment rules, code fixes
 2. Tier 1: Remote Fireworks AI (remote tokens) — ALL other domains
-   - CoT prompts, self-consistency voting, few-shot, judge-aware
-3. Emergency: Local model if remote completely fails
+3. Emergency: Local model (lazy-loaded) if remote completely fails
 
-This is the "Last-Resort Finals Mode" from the winning plan:
-- exact local rules first
-- otherwise remote
-- no local LLM generation in normal path
-- one retry for malformed NER/code/logic
-- answer-only outputs
-- strict postprocessing
-
-Accuracy comes from remote models. Token savings come from deterministic solvers.
+Local model is NOT loaded at startup — only loaded on first emergency fallback.
+This saves 10-30s of boot time, preventing container TIMEOUT.
 """
 import asyncio
 import os
@@ -30,10 +22,10 @@ from agent.evaluator import postprocess, try_solve_locally, validate
 from agent.remote_model import RemoteModel
 from agent.trap_detector import TrapDetector
 
-# Local model is optional — used ONLY for emergency fallback.
+# Local model is optional — lazy-loaded only for emergency fallback.
+_LOCAL_MODEL_AVAILABLE = True
 try:
     from agent.local_model import LocalModel
-    _LOCAL_MODEL_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
     LocalModel = None
     _LOCAL_MODEL_AVAILABLE = False
@@ -87,7 +79,8 @@ class HybridRouter:
         mode: str = "hybrid",
     ):
         self.classifier = DomainClassifier()
-        self.local = LocalModel() if _LOCAL_MODEL_AVAILABLE else None
+        # Local model is NOT loaded here — lazy-loaded on first emergency fallback
+        self._local_model = None
         self.remote = RemoteModel(api_key, base_url, allowed_models)
         self.traps = TrapDetector()
         self.mode = mode
@@ -96,18 +89,28 @@ class HybridRouter:
         self._active_local_tasks = 0
         self._answer_cache: dict[str, tuple[str, dict]] = {}
 
+    def _get_local_model(self):
+        """Lazy-load local model only when needed for emergency fallback."""
+        if self._local_model is None and _LOCAL_MODEL_AVAILABLE:
+            try:
+                self._local_model = LocalModel()
+            except Exception as e:
+                print(f"[Router] Failed to load local model: {e}", flush=True)
+                self._local_model = None
+        return self._local_model
+
     async def route_async(self, prompt: str) -> tuple[str, dict]:
         """Route one prompt and return (answer_string, metadata_dict).
 
         Pure Remote-First flow:
         1. Check cache
         2. Classify domain
-        3. Check for traps (spatial/hallucination) → force remote
-        4. Tier 0: Deterministic solver (exact only) — 0 tokens
+        3. Check for traps (spatial/hallucination) -> force remote
+        4. Tier 0: Deterministic solver (exact only) -- 0 tokens
         5. Tier 1: Remote accuracy engine (ALL domains)
         6. Validate + postprocess
         7. Retry only on malformed NER/code/logic
-        8. Emergency local fallback if remote fails
+        8. Emergency local fallback if remote fails (lazy-loaded)
         """
         deadline = time.monotonic() + 28.0
         cache_key = f"{self.mode}:{_normalize_cache_prompt(prompt)}"
@@ -122,19 +125,18 @@ class HybridRouter:
             is_semantic_trap, trap_reason, trap_score = self.traps.is_trap(prompt)
 
         # SPATIAL PUZZLE & HALLUCINATION INTERCEPT:
-        # If detected, force the domain to 'logic' (REMOTE) to bypass local.
         if _is_spatial_puzzle(prompt) or _is_hallucination_trap(prompt) or is_semantic_trap:
             domain = "logic"
             conf = 1.0
 
-        # ── Tier 0: Deterministic solver (exact only) ──────────────────
+        # -- Tier 0: Deterministic solver (exact only) --
         direct = try_solve_locally(domain, prompt)
         if direct is not None:
             metadata = self._trace(domain, conf, "direct", "deterministic", model="local")
             self._answer_cache[cache_key] = (direct, metadata)
             return direct, metadata
 
-        # ── Tier 1: Remote accuracy engine (ALL non-deterministic tasks) ──
+        # -- Tier 1: Remote accuracy engine (ALL non-deterministic tasks) --
         answer, metadata = await self._remote_with_retry(
             prompt, domain, conf, deadline
         )
@@ -176,19 +178,14 @@ class HybridRouter:
 
             # Safety net: never return empty string
             if not cleaned.strip():
-                print("[WARNING] Remote returned empty after postprocess. Trying local fallback.", flush=True)
-                try:
-                    local_ans = await self._generate_local(prompt, domain, deadline=deadline)
-                    cleaned = postprocess(domain, local_ans)
-                except Exception as local_exc:
-                    print(f"[WARNING] Local fallback also failed: {local_exc}", flush=True)
-                    cleaned = "Unable to determine"
+                print("[WARNING] Remote returned empty after postprocess.", flush=True)
+                cleaned = "Unable to determine"
 
             metadata = self._trace(domain, conf, "remote", "remote-first", model=model)
             return cleaned, metadata
 
         except Exception as exc:
-            # Remote completely failed — emergency local fallback
+            # Remote completely failed -- emergency local fallback (lazy-loaded)
             print(f"[WARNING] Remote call failed: {exc}. Emergency local fallback.", flush=True)
             try:
                 local_ans = await self._generate_local(prompt, domain, deadline=deadline)
@@ -200,12 +197,13 @@ class HybridRouter:
             metadata = self._trace(domain, conf, "local", "remote-failed", model="local")
             return fallback, metadata
 
-    # Timeout for local model — emergency fallback only
-    _LOCAL_TIMEOUT_S = 12
+    # Timeout for local model -- emergency fallback only
+    _LOCAL_TIMEOUT_S = 10
 
     async def _generate_local(self, prompt: str, domain: str, temperature: float = 0.1, deadline: float = 0.0, timeout: float = 0.0) -> str:
-        """Local model generation — used for emergency fallback only."""
-        if self.local is None:
+        """Local model generation -- used for emergency fallback only. Lazy-loads model."""
+        local = self._get_local_model()
+        if local is None:
             raise RuntimeError("Local model not available")
 
         if deadline > 0 and time.monotonic() > deadline - 4.0:
@@ -222,7 +220,7 @@ class HybridRouter:
             return await asyncio.wait_for(
                 loop.run_in_executor(
                     self._local_executor,
-                    self.local.generate,
+                    local.generate,
                     prompt,
                     domain,
                     temperature

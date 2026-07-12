@@ -3,7 +3,7 @@ remote_model.py
 ---------------
 Async Fireworks AI client — Remote-First Accuracy Engine with:
 - Chain-of-Thought prompting with answer extraction
-- Self-consistency voting for math/logic (2 parallel calls)
+- Self-consistency voting for math/logic (3 parallel calls)
 - Few-shot examples in system prompts
 - Judge-aware prompts (sentiment needs reason, factual needs explanation)
 - Model specialization per domain
@@ -22,14 +22,14 @@ from agent.compressor import DomainCompressor
 # Output token caps — tightened for token efficiency
 # Sentiment/summarization handled locally when possible, so these are fallback caps
 REMOTE_MAX_TOKENS = {
-    "sentiment":      60,   # Fallback only — usually handled locally (label + reason)
-    "factual":       200,   # Answer + brief explanation
-    "math":          400,   # CoT
-    "ner":           250,   # Needs all entities with labels
-    "summarization": 250,   # Fallback only — usually handled locally
+    "sentiment":      100,   # Fallback only — usually handled locally (label + reason)
+    "factual":       300,   # Answer + brief explanation
+    "math":          500,   # CoT
+    "ner":           300,   # Needs all entities with labels
+    "summarization": 400,   # Fallback only — usually handled locally
     "debugging":     500,
     "codegen":       600,
-    "logic":         500,   # CoT
+    "logic":         600,   # CoT
 }
 
 # Judge-aware system prompts with few-shot examples
@@ -63,7 +63,7 @@ RETRY_SYSTEM_PROMPTS = {
     "summarization": "Follow the exact format requested. Capture both main points and challenges.",
 }
 
-# Domains that use self-consistency voting (2 parallel calls, majority vote)
+# Domains that use self-consistency voting (3 parallel calls, majority vote)
 SELF_CONSISTENCY_DOMAINS = {"math", "logic"}
 
 # Model specialization per the plan
@@ -153,16 +153,16 @@ class RemoteModel:
         models: list[str],
         conf: float,
     ) -> tuple[str, str]:
-        """Generate 2 responses in parallel and take majority vote on extracted answer."""
+        """Generate 3 responses in parallel and take majority vote on extracted answer."""
         format_hint = self._get_format_hint(domain)
         user_prompt = f"Task:\n{compressed}{format_hint}\n\nAnswer:"
         
         # Use the best available model for all calls
         model = models[0] if models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
         
-        # Launch 2 parallel calls with slightly different temperatures
+        # Launch 3 parallel calls with slightly different temperatures
         tasks = []
-        temps = [0.1, 0.3]  # Low variance for consistency
+        temps = [0.1, 0.3, 0.5]  # Low variance for consistency
         for temp in temps:
             tasks.append(self._call_with_temp(system, user_prompt, max_tok, model, temp))
         
@@ -198,7 +198,7 @@ class RemoteModel:
                         return raw, model
                 return best_answer, model
             else:
-                # No majority with 2 calls — return the first response (temp=0.1, most likely correct)
+                # No majority — return the first response (temp=0.1, most likely correct)
                 return raw_responses[0] if raw_responses else answers[0], model
                 
         except Exception as e:
@@ -245,9 +245,9 @@ class RemoteModel:
         """Make a call with a specific temperature (for self-consistency).
         Includes manual retry logic for reliability."""
         last_exc = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
-                async with httpx.AsyncClient(timeout=25.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     payload = {
                         "model": model,
                         "messages": [
@@ -271,7 +271,7 @@ class RemoteModel:
                     return resp.json()["choices"][0]["message"]["content"].strip()
             except Exception as e:
                 last_exc = e
-                if attempt < 2:
+                if attempt < 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
         raise last_exc
 
@@ -342,14 +342,14 @@ class RemoteModel:
         raise last_exc or Exception("All remote correction models failed")
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5, min=0.5, max=3),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=2),
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
     )
     async def _call(
         self, system: str, user: str, max_tokens: int, model: str, reasoning: bool = False
     ) -> str:
-        async with httpx.AsyncClient(timeout=25.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             payload = {
                 "model": model,
                 "messages": [
