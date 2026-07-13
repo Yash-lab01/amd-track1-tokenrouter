@@ -34,7 +34,7 @@ except (ImportError, ModuleNotFoundError):
 CLASSIFIER_CONF_THRESHOLD = 0.65
 
 # Domains that should retry on validation failure (malformed output only)
-RETRY_DOMAINS = {"ner", "debugging", "codegen", "logic", "factual", "summarization"}
+RETRY_DOMAINS = {"ner", "debugging", "codegen", "logic"}
 
 _SPATIAL_CONSTRAINT_KEYWORDS = [
     "immediately to the left", "immediately to the right",
@@ -169,18 +169,8 @@ class HybridRouter:
             answer, model = await self.remote.generate(prompt, domain, conf=conf)
             is_valid, cleaned = validate(domain, prompt, answer)
 
-            # Retry for domains with strict format requirements
+            # Retry only for domains with strict format requirements (malformed output)
             should_retry = (not answer.strip()) or (not is_valid and domain in RETRY_DOMAINS)
-            
-            # Factual completeness check: if prompt asks for explanation but answer is too short
-            if not should_retry and domain == "factual":
-                if _prompt_asks_explanation(prompt) and len(cleaned.split()) < 20:
-                    should_retry = True
-                    print("[Router] Factual answer too short for explanation prompt — retrying.", flush=True)
-            
-            # Summarization format check: if format validation failed, always retry
-            if not should_retry and domain == "summarization" and not is_valid:
-                should_retry = True
             if should_retry:
                 try:
                     retry_answer, retry_model = await self.remote.generate_correction(

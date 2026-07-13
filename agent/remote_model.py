@@ -65,10 +65,9 @@ RETRY_SYSTEM_PROMPTS = {
 }
 
 # Domains that use self-consistency voting (parallel calls, majority vote)
-# Math: 3 calls (high value, parallel so no timeout risk)
-# Logic: 2 calls (voting benefit without timeout risk — 3 calls was too slow)
-SELF_CONSISTENCY_DOMAINS = {"math", "logic"}
-SELF_CONSISTENCY_CALLS = {"math": 3, "logic": 2}
+# Math only: 3 calls. Logic self-consistency caused TIMEOUT (documented failure).
+SELF_CONSISTENCY_DOMAINS = {"math"}
+SELF_CONSISTENCY_CALLS = {"math": 3}
 
 REMOTE_CALL_TIMEOUT_S = float(os.environ.get("REMOTE_CALL_TIMEOUT_S", "20"))
 REMOTE_MODEL_CASCADE_LIMIT = int(os.environ.get("REMOTE_MODEL_CASCADE_LIMIT", "99"))
@@ -232,13 +231,13 @@ class RemoteModel:
             raise last_exc or e
 
     def _should_use_consistency(self, prompt: str, domain: str, conf: float) -> bool:
-        """Use voting for math and logic — always-on for these high-value domains."""
+        """Use voting only for hard math problems where it improves accuracy enough to justify tokens."""
         if os.environ.get("ENABLE_SELF_CONSISTENCY", "1") != "1":
             return False
         if domain not in SELF_CONSISTENCY_DOMAINS:
             return False
-        # Always use consistency for math and logic — it's the accuracy engine
-        return True
+        # Only use consistency for difficult math — saves tokens on simple problems
+        return self._score_difficulty(prompt, conf) >= 2
 
     def _limited_models(self, models: list[str]) -> list[str]:
         """Cap model cascading so one bad task cannot consume the whole scorer budget."""
