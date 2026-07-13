@@ -36,7 +36,7 @@ REMOTE_MAX_TOKENS = {
 # Judge-aware system prompts with few-shot examples
 # Key insight: the judge is an LLM that checks semantic completeness
 REMOTE_SYSTEM_PROMPTS = {
-    "ner":           'Extract ALL named entities from the text. Return ONLY a JSON object with exactly these keys: {"person":[],"org":[],"location":[],"date":[]}. List every person, organization, location, and date. Use empty arrays for missing types. No prose, no markdown.\nExample: Input: "Tim Cook visited Paris in 2024" → {"person":["Tim Cook"],"org":[],"location":["Paris"],"date":["2024"]}',
+    "ner":           'Extract ALL named entities from the text. Missing even ONE entity means failure — be thorough and check every word. Return ONLY a JSON object with exactly these keys: {"person":[],"org":[],"location":[],"date":[]}. List every person, organization, location, and date. Use empty arrays for missing types. No prose, no markdown.\nExample: Input: "Tim Cook visited Paris in 2024" → {"person":["Tim Cook"],"org":[],"location":["Paris"],"date":["2024"]}\nExample: Input: "On March 15 2023, Sundar Pichai announced Google would open a lab in Zurich with ETH Zurich" → {"person":["Sundar Pichai"],"org":["Google","ETH Zurich"],"location":["Zurich"],"date":["March 15 2023"]}',
     
     "sentiment":     "Classify the sentiment as Positive, Negative, Neutral, or Mixed. Then give a one-sentence reason that acknowledges ALL aspects of the text (both positive and negative if present). Format: 'Label: <one-sentence reason>'. If the text has both positive and negative elements, use Mixed or Neutral and acknowledge both sides.\nExample: 'The food was great but service was slow.' → Neutral: The review acknowledges both positive food quality and negative service speed.\nExample: 'I love this product!' → Positive: The review expresses clear satisfaction with the product.",
     
@@ -54,36 +54,25 @@ REMOTE_SYSTEM_PROMPTS = {
 }
 
 RETRY_SYSTEM_PROMPTS = {
-    "ner": 'Return ONLY valid JSON with keys person, org, location, date. List ALL entities. Use empty arrays when missing.',
+    "ner": 'Return ONLY valid JSON with keys person, org, location, date. List ALL entities — missing even one is failure. Use empty arrays when missing.',
     "sentiment": "Classify as Positive, Negative, Neutral, or Mixed. Give a one-sentence reason acknowledging all aspects. Format: 'Label: reason'.",
     "math": "Solve step by step. End with 'Final Answer: <number>'.",
     "debugging": "Return only syntactically valid corrected Python code.",
     "codegen": "Return only syntactically valid Python code.",
     "logic": "Think step by step. End with 'Final Answer: <answer>'.",
-    "factual": "Answer directly and completely. Explain if asked to explain.",
-    "summarization": "Follow the exact format requested. Capture both main points and challenges.",
+    "factual": "Answer directly and completely. If the question asks to explain, describe, compare, or analyze, provide a thorough explanation with at least 30 words. Do not give one-word answers when explanation is requested.",
+    "summarization": "Follow the EXACT format requested. Count your sentences/bullets carefully. If asked for exactly N sentences, output exactly N. If asked for bullet points under M words, ensure each bullet is under M words. Capture both main points and challenges.",
 }
 
-# Domains that use self-consistency voting (3 parallel calls, majority vote)
+# Domains that use self-consistency voting (parallel calls, majority vote)
+# Math: 3 calls (high value, parallel so no timeout risk)
+# Logic: 2 calls (voting benefit without timeout risk — 3 calls was too slow)
 SELF_CONSISTENCY_DOMAINS = {"math", "logic"}
+SELF_CONSISTENCY_CALLS = {"math": 3, "logic": 2}
 
-# Runtime safety overrides. These preserve reasoning prompts, but prevent a
-# small batch of hard tasks from expanding into dozens of slow remote calls.
-REMOTE_MAX_TOKENS.update({
-    "sentiment": 48,
-    "factual": 160,
-    "math": 160,
-    "ner": 180,
-    "summarization": 220,
-    "debugging": 360,
-    "codegen": 450,
-    "logic": 260,
-})
-SELF_CONSISTENCY_DOMAINS = {"logic"}
-REMOTE_CALL_TIMEOUT_S = float(os.environ.get("REMOTE_CALL_TIMEOUT_S", "10"))
-REMOTE_MODEL_CASCADE_LIMIT = int(os.environ.get("REMOTE_MODEL_CASCADE_LIMIT", "2"))
-CONSISTENCY_CALLS = int(os.environ.get("CONSISTENCY_CALLS", "2"))
-CONSISTENCY_ATTEMPTS = int(os.environ.get("CONSISTENCY_ATTEMPTS", "1"))
+REMOTE_CALL_TIMEOUT_S = float(os.environ.get("REMOTE_CALL_TIMEOUT_S", "20"))
+REMOTE_MODEL_CASCADE_LIMIT = int(os.environ.get("REMOTE_MODEL_CASCADE_LIMIT", "99"))
+CONSISTENCY_ATTEMPTS = int(os.environ.get("CONSISTENCY_ATTEMPTS", "2"))
 
 # Model specialization per the plan
 DOMAIN_MODEL_PREFS: dict[str, list[list[str]]] = {
@@ -181,8 +170,10 @@ class RemoteModel:
         model = models[0] if models else "accounts/fireworks/models/gemma-4-26b-a4b-it"
         
         # Launch a bounded number of calls with slightly different temperatures.
+        # Math: 3 calls, Logic: 2 calls (to avoid timeout)
+        num_calls = SELF_CONSISTENCY_CALLS.get(domain, 3)
         tasks = []
-        temps = [0.1, 0.35, 0.55][:max(1, min(CONSISTENCY_CALLS, 3))]
+        temps = [0.1, 0.35, 0.55][:max(1, min(num_calls, 3))]
         for temp in temps:
             tasks.append(self._call_with_temp(system, user_prompt, max_tok, model, temp))
         
@@ -241,12 +232,13 @@ class RemoteModel:
             raise last_exc or e
 
     def _should_use_consistency(self, prompt: str, domain: str, conf: float) -> bool:
-        """Use voting only for hard logic, where it can improve accuracy enough to justify latency."""
+        """Use voting for math and logic — always-on for these high-value domains."""
         if os.environ.get("ENABLE_SELF_CONSISTENCY", "1") != "1":
             return False
         if domain not in SELF_CONSISTENCY_DOMAINS:
             return False
-        return self._score_difficulty(prompt, conf) >= 2
+        # Always use consistency for math and logic — it's the accuracy engine
+        return True
 
     def _limited_models(self, models: list[str]) -> list[str]:
         """Cap model cascading so one bad task cannot consume the whole scorer budget."""
@@ -271,8 +263,18 @@ class RemoteModel:
             if nums:
                 return nums[-1]
         
-        # For logic: take last non-empty line
+        # For logic: try multiple conclusion patterns
         if domain == "logic":
+            # Try "Therefore, X" / "Thus, X" / "So, X" / "Conclusion: X"
+            for pattern in [
+                r"(?:Therefore|Thus|Hence|So)\s*[,:]\s*(.+?)(?:\n|$)",
+                r"Conclusion\s*[:]\s*(.+?)(?:\n|$)",
+                r"(?:The answer is|It is)\s+(.+?)(?:\n|$)",
+            ]:
+                match = re.search(pattern, response, re.IGNORECASE)
+                if match:
+                    return match.group(1).strip().rstrip(".")
+            # Take last non-empty line
             lines = [ln.strip() for ln in response.split("\n") if ln.strip()]
             if lines:
                 return lines[-1].rstrip(".")

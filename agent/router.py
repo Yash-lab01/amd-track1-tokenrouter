@@ -6,10 +6,9 @@ Pure Remote-First Token-Efficient Router.
 Strategy:
 1. Tier 0: Deterministic solvers (0 tokens) — math, facts, sentiment rules, code fixes
 2. Tier 1: Remote Fireworks AI (remote tokens) — ALL other domains
-3. Emergency: Local model (lazy-loaded) if remote completely fails
+3. Emergency: Local model (loaded at startup) if remote completely fails
 
-Local model is NOT loaded at startup — only loaded on first emergency fallback.
-This saves 10-30s of boot time, preventing container TIMEOUT.
+Local model is loaded at startup and always available for emergency fallback.
 """
 import asyncio
 import os
@@ -35,7 +34,7 @@ except (ImportError, ModuleNotFoundError):
 CLASSIFIER_CONF_THRESHOLD = 0.65
 
 # Domains that should retry on validation failure (malformed output only)
-RETRY_DOMAINS = {"ner", "debugging", "codegen", "logic"}
+RETRY_DOMAINS = {"ner", "debugging", "codegen", "logic", "factual", "summarization"}
 
 _SPATIAL_CONSTRAINT_KEYWORDS = [
     "immediately to the left", "immediately to the right",
@@ -69,6 +68,16 @@ def _normalize_cache_prompt(prompt: str) -> str:
     return re.sub(r"\s+", " ", prompt.strip())
 
 
+def _prompt_asks_explanation(prompt: str) -> bool:
+    """Check if a factual prompt asks for explanation, not just a one-word answer."""
+    lowered = prompt.lower()
+    return bool(re.search(
+        r"\b(explain|describe|analyze|compare|contrast|why|how does|elaborate|"
+        r"what is the difference|briefly explain|in detail)\b",
+        lowered
+    ))
+
+
 
 class HybridRouter:
     def __init__(
@@ -79,8 +88,17 @@ class HybridRouter:
         mode: str = "hybrid",
     ):
         self.classifier = DomainClassifier()
-        # Local model is NOT loaded here — lazy-loaded on first emergency fallback
+        # Load local model at startup for emergency fallback
         self._local_model = None
+        if _LOCAL_MODEL_AVAILABLE and LocalModel is not None:
+            try:
+                self._local_model = LocalModel()
+                print("[Router] Local model loaded at startup for emergency fallback.", flush=True)
+            except Exception as e:
+                print(f"[Router] Failed to load local model: {e}. Running without local fallback.", flush=True)
+                self._local_model = None
+        else:
+            print("[Router] Local model not available — running without local fallback.", flush=True)
         self.remote = RemoteModel(api_key, base_url, allowed_models)
         self.traps = TrapDetector()
         self.mode = mode
@@ -90,13 +108,9 @@ class HybridRouter:
         self._answer_cache: dict[str, tuple[str, dict]] = {}
 
     def _get_local_model(self):
-        """Lazy-load the local model only when explicitly enabled."""
-        if os.environ.get("ENABLE_LOCAL_EMERGENCY_FALLBACK", "0") != "1":
-            raise RuntimeError("Local emergency fallback disabled")
-        if not _LOCAL_MODEL_AVAILABLE or LocalModel is None:
-            raise RuntimeError("Local model not available")
+        """Return the pre-loaded local model for emergency fallback."""
         if self._local_model is None:
-            self._local_model = LocalModel()
+            raise RuntimeError("Local model not available")
         return self._local_model
 
     async def route_async(self, prompt: str) -> tuple[str, dict]:
@@ -155,8 +169,18 @@ class HybridRouter:
             answer, model = await self.remote.generate(prompt, domain, conf=conf)
             is_valid, cleaned = validate(domain, prompt, answer)
 
-            # Retry only for domains with strict format requirements
+            # Retry for domains with strict format requirements
             should_retry = (not answer.strip()) or (not is_valid and domain in RETRY_DOMAINS)
+            
+            # Factual completeness check: if prompt asks for explanation but answer is too short
+            if not should_retry and domain == "factual":
+                if _prompt_asks_explanation(prompt) and len(cleaned.split()) < 20:
+                    should_retry = True
+                    print("[Router] Factual answer too short for explanation prompt — retrying.", flush=True)
+            
+            # Summarization format check: if format validation failed, always retry
+            if not should_retry and domain == "summarization" and not is_valid:
+                should_retry = True
             if should_retry:
                 try:
                     retry_answer, retry_model = await self.remote.generate_correction(
@@ -185,11 +209,8 @@ class HybridRouter:
             return cleaned, metadata
 
         except Exception as exc:
-            # Remote completely failed -- emergency local fallback (lazy-loaded)
+            # Remote completely failed -- emergency local fallback
             print(f"[WARNING] Remote call failed: {exc}. Emergency local fallback.", flush=True)
-            if os.environ.get("ENABLE_LOCAL_EMERGENCY_FALLBACK", "0") != "1":
-                metadata = self._trace(domain, conf, "remote", "remote-failed-no-local", model="")
-                return "Unable to determine", metadata
             try:
                 local_ans = await self._generate_local(prompt, domain, deadline=deadline)
                 is_val, cleaned_local = validate(domain, prompt, local_ans)

@@ -98,7 +98,7 @@ async def main():
     # Semaphore: limits simultaneous remote API calls.
     # Keep this moderate; too much concurrency can trigger rate limits and slow
     # the entire batch enough to hit the scorer timeout.
-    semaphore = asyncio.Semaphore(int(os.environ.get("TASK_CONCURRENCY", "5")))
+    semaphore = asyncio.Semaphore(int(os.environ.get("TASK_CONCURRENCY", "3")))
     t_start   = time.monotonic()
 
     futures = [process_task(t, router, semaphore) for t in tasks]

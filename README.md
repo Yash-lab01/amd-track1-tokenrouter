@@ -34,7 +34,7 @@ OptiRoute is a **remote-first accuracy router** with exact local shortcuts. It c
 | ------------ | -------------------------------------------- | ------------------- | ---------------------------------------- |
 | **Tier 0**   | Deterministic Solvers (Python)               | **0 tokens**        | Math, facts, sentiment rules, code fixes |
 | **Tier 1**   | Remote Fireworks AI (CoT + Self-Consistency) | Remote tokens       | Everything Tier 0 can't solve            |
-| **Fallback** | Local Qwen 1.5B (Emergency)                  | **0 remote tokens** | Only if remote completely fails          |
+| **Fallback** | Local Qwen 1.5B (Loaded at startup)          | **0 remote tokens** | Only if remote completely fails          |
 
 ---
 
@@ -60,7 +60,7 @@ Prompt
   ├──▶ [Tier 1: Remote Fireworks AI]
   │        ├── Model specialization (Kimi for code, Minimax for logic, Gemma for factual)
   │        ├── Chain-of-Thought prompts with "Final Answer: X" extraction
-  │        ├── Self-consistency voting (3 parallel calls for math/logic)
+  │        ├── Self-consistency voting (3 calls for math, 2 calls for logic)
   │        ├── Few-shot examples in system prompts
   │        ├── Judge-aware prompts (sentiment needs reason, factual needs explanation)
   │        ├── Dynamic max_tokens based on prompt complexity
@@ -71,9 +71,11 @@ Prompt
   │        ├── Code: AST syntax check
   │        ├── Sentiment: Label + reason format
   │        ├── Math: CoT answer extraction
-  │        └── Logic: CoT answer extraction + yes/no/impossible handling
+  │        ├── Logic: CoT answer extraction + yes/no/impossible handling
+  │        ├── Factual: Completeness check (retry if too short for explanation prompts)
+  │        └── Summarization: Format validation (sentence count, bullet count, word limits)
   │
-  └──▶ [Retry on malformed] ──── NER/code/logic only, one retry
+  └──▶ [Retry on malformed] ──── NER/code/logic/factual/summarization, one retry
          │
          ▼
     [Emergency Local Fallback] ── Only if remote completely fails
@@ -86,7 +88,7 @@ Prompt
 | `agent/classifier.py`    | TF-IDF domain classifier (< 10MB, < 1ms inference)                           |
 | `agent/trap_detector.py` | Semantic trap detector for logic puzzles                                     |
 | `agent/compressor.py`    | Safe prompt compressor (preserves reasoning prompts)                         |
-| `agent/local_model.py`   | Thread-safe Qwen 1.5B wrapper (emergency fallback)                           |
+| `agent/local_model.py`   | Thread-safe Qwen 1.5B wrapper (emergency fallback, loaded at startup)        |
 | `agent/remote_model.py`  | Remote API client with CoT, self-consistency, few-shot, model specialization |
 | `agent/router.py`        | Core routing logic — remote-first with deterministic shortcuts               |
 | `agent/evaluator.py`     | Deterministic solvers, validators, judge-aware postprocessing                |
@@ -246,28 +248,30 @@ To deploy your own copy:
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Remote-First Architecture** | Local 1.5B model hallucinates on hidden test questions. Remote models are the accuracy engine.                                             |
 | **Chain-of-Thought Prompts**  | Models reason much better with step-by-step thinking. We extract only the final answer.                                                    |
-| **Self-Consistency Voting**   | 3 parallel calls for math/logic with majority vote. Proven accuracy boost.                                                                 |
+| **Self-Consistency Voting**   | 3 parallel calls for math, 2 for logic with majority vote. Proven accuracy boost.                                                          |
 | **Judge-Aware Prompts**       | The judge is an LLM checking semantic completeness. Sentiment needs a reason, factual needs explanation, summarization needs exact format. |
 | **Deterministic Solvers**     | 59 stable facts + 25+ math patterns solved with 0 tokens and 100% accuracy.                                                                |
 | **Model Specialization**      | Kimi for code, Minimax for logic, Gemma 26B for factual/NER/sentiment.                                                                     |
 | **Ranked Fallback Cascade**   | If a model 404s, instantly cascade to next best. Bad-model cache prevents retries.                                                         |
 | **Safe Prompt Compression**   | Preserves full prompts for logic/math/NER. Only cleans whitespace/markdown for other domains.                                              |
-| **Emergency Local Fallback**  | If all remote models fail, local Qwen 1.5B generates a best-effort answer. Better than empty string.                                       |
+| **Emergency Local Fallback**  | Local Qwen 1.5B loaded at startup. If all remote models fail, generates a best-effort answer. Better than empty string.                    |
+| **Factual Completeness Check**| Detects when explanation is requested but answer is too short (< 20 words), triggers retry with stricter prompt.                           |
+| **Summarization Retry**       | Format validation failures (wrong sentence/bullet count, word limit exceeded) trigger retry with explicit format instructions.             |
 
 ---
 
 ## 📊 Domain Routing Strategy
 
-| Domain            | Tier 0 (0 tokens)             | Tier 1 (Remote)                  | Model Preference    |
-| ----------------- | ----------------------------- | -------------------------------- | ------------------- |
-| **Math**          | 25+ deterministic patterns    | CoT + self-consistency (3 calls) | Gemma 26B → Minimax |
-| **Factual**       | 59 stable facts               | Complete answer with explanation | Gemma 26B → Minimax |
-| **Sentiment**     | Lexicon rules (obvious cases) | Label + one-sentence reason      | Gemma 26B           |
-| **Logic**         | —                             | CoT + self-consistency (3 calls) | Minimax → Gemma 31B |
-| **NER**           | —                             | JSON with all entities           | Gemma 26B           |
-| **Debugging**     | AST pattern fixes             | Corrected code only              | Kimi → Gemma 26B    |
-| **Codegen**       | AST pattern fixes             | Working code only                | Kimi → Gemma 26B    |
-| **Summarization** | —                             | Exact format (sentences/bullets) | Gemma 26B           |
+| Domain            | Tier 0 (0 tokens)             | Tier 1 (Remote)                  | Model Preference    | Self-Consistency |
+| ----------------- | ----------------------------- | -------------------------------- | ------------------- | ---------------- |
+| **Math**          | 25+ deterministic patterns    | CoT + self-consistency (3 calls) | Gemma 26B → Minimax | ✅ Yes (3 calls) |
+| **Factual**       | 59 stable facts               | Complete answer with explanation | Gemma 26B → Minimax | ❌ No            |
+| **Sentiment**     | Lexicon rules (obvious cases) | Label + one-sentence reason      | Gemma 26B           | ❌ No            |
+| **Logic**         | —                             | CoT + self-consistency (2 calls) | Minimax → Gemma 31B | ✅ Yes (2 calls) |
+| **NER**           | —                             | JSON with all entities           | Gemma 26B           | ❌ No            |
+| **Debugging**     | AST pattern fixes             | Corrected code only              | Kimi → Gemma 26B    | ❌ No            |
+| **Codegen**       | AST pattern fixes             | Working code only                | Kimi → Gemma 26B    | ❌ No            |
+| **Summarization** | —                             | Exact format (sentences/bullets) | Gemma 26B           | ❌ No            |
 
 ---
 
@@ -277,4 +281,4 @@ To deploy your own copy:
 - **HuggingFace Space:** https://huggingface.co/spaces/YashB-21/amd-track1-tokenrouter
 - **Local Model:** https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF
 - **Fireworks AI:** https://fireworks.ai
-- **Full Hackathon Details:** See `HACKATHON_FULL_DETAILS.md`
+- **Full Hackathon Details:** See `HACKATHON.md`
