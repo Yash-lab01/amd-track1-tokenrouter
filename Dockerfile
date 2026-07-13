@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# Build cache bust — change this line to force full rebuild on HF Spaces
+# Version: v2-fixed-20260713
+ARG CACHEBUST=2
+
 # ── System deps for llama-cpp-python (CPU build) ──────────────────────────────
 RUN apt-get update && apt-get install -y \
     build-essential \
